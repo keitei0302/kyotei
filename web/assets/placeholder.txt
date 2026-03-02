@@ -1,0 +1,2 @@
+// Image files will be handled via the provided absolute paths or by copying them to web/assets.
+// I will use SVG <image> tags to place boat and turnmark.

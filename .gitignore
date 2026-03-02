@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+cache/
+data/
+*.lzh
+*.html
+!web/templates/*.html
+test_output.txt
+.DS_Store

@@ -1,3 +1,10 @@
+from playwright.sync_api import sync_playwright
+import numpy as np
+import warnings
+import os
+import re
+import json
+import sys
 import argparse
 import pickle
 import pandas as pd
@@ -6,16 +13,9 @@ from datetime import datetime, timedelta, timezone
 def get_jst_now():
     """日本標準時 (JST) を取得"""
     return datetime.now(timezone(timedelta(hours=9)))
+
 from bs4 import BeautifulSoup
 import requests
-import sys
-import warnings
-import os
-import re
-import json
-import numpy as np
-from playwright.sync_api import sync_playwright
-
 
 warnings.filterwarnings("ignore")
 

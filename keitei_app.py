@@ -1,7 +1,11 @@
 import argparse
 import pickle
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+def get_jst_now():
+    """日本標準時 (JST) を取得"""
+    return datetime.now(timezone(timedelta(hours=9)))
 from bs4 import BeautifulSoup
 import requests
 import sys
@@ -248,7 +252,9 @@ def get_today_players(place_no, race_no, date_str):
                     p['motor_2ren'] = float(tds[6].text.split()[1]) if len(tds[6].text.split()) > 1 else 0.0
             results.append(p)
         return {"players": results, "deadline": deadline} if len(results) == 6 else None
-    except: return None
+    except Exception as e:
+        print(f"[TodayPlayers] Error: {e}")
+        return None
 
 # ──────────────────────────────────────────
 # AI予測・戦術解析
@@ -390,9 +396,9 @@ def main():
         r_no = int(race_in)
     except: return
 
-    # 日本時間 (JST) を取得 (UTC+9)
-    # サーバーが UTC の場合でも正しく判定するため
-    now_jst = datetime.utcnow() + timedelta(hours=9)
+    # 日本時間 (JST) を取得して日付を判定
+    now_jst = get_jst_now()
+    # 午前5時までは前日扱いとする（ナイター・ミッドナイト開催考慮）
     target_date = now_jst - (timedelta(days=1) if now_jst.hour < 5 else timedelta(0))
     d_str = target_date.strftime("%Y%m%d")
 
@@ -429,12 +435,15 @@ def main():
     draw_slit_diagram(players)
 
     # ── 結果を先に取得（買い目表示に使う）──
-    res = get_race_result(p_no, r_no, d_str)
     hit_combo = None
     hit_price = None
-    if res and res.get("rank"):
-        hit_combo = "-".join(map(str, res["rank"]))
-        hit_price = res.get("dividends", {}).get("3連単", {}).get("price", "---")
+    try:
+        res = get_race_result(p_no, r_no, d_str)
+        if res and res.get("rank"):
+            hit_combo = "-".join(map(str, res["rank"]))
+            hit_price = res.get("dividends", {}).get("3連単", {}).get("price", "---")
+    except Exception as e:
+        print(f"[Debug] Result Check Error: {e}")
 
     # ── 買い目表示（的中をインラインで表示）──
     print("\n======= 【 推奨 8点 】 =======")

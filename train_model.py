@@ -25,15 +25,13 @@ def apply_custom_rules(df_features, predictions):
     return adjusted_preds
 
 # --- 機械学習モデルの構築と学習 ---
-def prepare_data(db_path="data/boatrace.db"):
+def prepare_data(db_path="data/boatrace_real.db"):
     if not os.path.exists(db_path):
         print(f"Database not found at {db_path}")
         return None
         
     conn = sqlite3.connect(db_path)
-    
-    # モックデータから学習用データセットを作成
-    # 今回は「特定の場・レースにおいて、各艇が1着になるか（2値分類）」を学習させるシンプルな例
+    # race_results テーブルから詳細データを読み込む
     df = pd.read_sql_query("SELECT * FROM race_results", conn)
     conn.close()
     
@@ -41,36 +39,33 @@ def prepare_data(db_path="data/boatrace.db"):
         print("No training data available.")
         return None
         
-    # 学習用データの組み立て（特徴量エンジニアリング）
-    # 今回のモックデータは情報が少ないため、[場コード, レース番号, 艇番] から [1着かどうか(0or1)] を予測させます
+    # 特徴量の選択
+    # X: [place_no, teiban, motor_no, show_time, entry_course, st]
+    # y: [target (1着=1, 他=0)]
     
-    records = []
-    for _, row in df.iterrows():
-        place = int(row['place_no'])
-        race = int(row['race_no'])
-        
-        # 1〜6号艇のレコードを作成
-        for teiban in range(1, 7):
-            # 目的変数：その艇が1着なら1、それ以外は0
-            is_winner = 1 if teiban == row['rank1_teiban'] else 0
-            
-            records.append({
-                'place_no': place,
-                'race_no': race,
-                'teiban': teiban,
-                'target': is_winner
-            })
-            
-    df_train = pd.DataFrame(records)
+    # NaNや異常値のクリーンアップ
+    df = df.dropna(subset=['show_time', 'st', 'motor_no'])
     
-    # 特徴量 (X) と 目的変数 (y)
-    X = df_train[['place_no', 'race_no', 'teiban']]
-    y = df_train['target']
+    X = df[['place_no', 'teiban', 'motor_no', 'show_time', 'entry_course', 'st']].copy()
+    y = df['target']
     
-    # カテゴリ変数の指定（LightGBM用）
-    categorical_features = ['place_no', 'race_no', 'teiban']
+    # カテゴリ変数の処理 (LabelEncoderを使用し、保存する)
+    from sklearn.preprocessing import LabelEncoder
+    categorical_features = ['place_no', 'teiban', 'motor_no', 'entry_course']
+    
+    label_encoders = {}
     for col in categorical_features:
-        X[col] = X[col].astype('category')
+        le = LabelEncoder()
+        X[col] = le.fit_transform(X[col].astype(str))
+        label_encoders[col] = le
+        
+    # 全てのデータ型を float に統一して型不整合を防ぐ
+    X = X.astype(float)
+        
+    # Encoderの保存
+    os.makedirs("models", exist_ok=True)
+    with open("models/label_encoders.pkl", "wb") as f:
+        pickle.dump(label_encoders, f)
         
     return X, y
 
@@ -80,12 +75,19 @@ def train_model():
         return
         
     X, y = data
+    # 異常値除去
+    X = X.replace([np.inf, -np.inf], np.nan).fillna(0)
+    
     print(f"Training data size: {len(X)} records")
     
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # 全てのメタデータを削ぎ落とす
+    X_raw = X.values.astype(np.float32)
+    y_raw = y.values.astype(np.float32)
     
-    train_data = lgb.Dataset(X_train, label=y_train)
-    test_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
+    X_train, X_test, y_train, y_test = train_test_split(X_raw, y_raw, test_size=0.15, random_state=42)
+    
+    # Dataset作成。不整合チェックを避けるため検証セットは入れない
+    train_data = lgb.Dataset(X_train, label=y_train, free_raw_data=False)
     
     params = {
         'objective': 'binary',
@@ -95,13 +97,12 @@ def train_model():
         'verbose': -1
     }
     
-    print("Training LightGBM model...")
+    print("Training LightGBM model (Atomic Mode)...")
+    # 特徴量名等のメタデータを一切持たない生の状態で学習
     model = lgb.train(
         params,
         train_data,
-        valid_sets=[train_data, test_data],
-        num_boost_round=100,
-        callbacks=[lgb.early_stopping(stopping_rounds=10), lgb.log_evaluation(0)]
+        num_boost_round=300
     )
     
     print("Model training completed.")

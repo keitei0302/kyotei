@@ -106,25 +106,20 @@ def extract_lzh(lzh_bytes):
 import re
 
 def parse_k_text(text_bytes):
-    """競走成績テキストを解析して [dict] を返す。
-    人間が読める形式（KYYYYMMDD.TXT）から正規表現で抽出。
-    """
+    """競走成績テキストを解析して [dict] を返す。"""
     records = []
     try:
-        # SJIS(CP932)でデコード
         text = text_bytes.decode('cp932', errors='replace')
     except Exception:
         return records
 
-    # 1. 日付の抽出 (例: 2025/ 1/ 1)
+    # 1. 日付の抽出
     date_match = re.search(r'(\d{4})/\s*(\d{1,2})/\s*(\d{1,2})', text)
     if not date_match:
         return records
     yyyy, mm, dd = date_match.groups()
     date_str = f"{yyyy}{int(mm):02d}{int(dd):02d}"
 
-    # 2. 場コードの抽出 (タイトル行などから推測するのは難しいため、場所名マッピングを利用)
-    # または、ファイル内の「ボートレース●●」から判定
     PLACE_NAME_TO_NO = {
         "桐生": 1, "戸田": 2, "江戸川": 3, "平和島": 4, "多摩川": 5,
         "浜名湖": 6, "蒲郡": 7, "常滑": 8, "津": 9, "三国": 10,
@@ -134,28 +129,27 @@ def parse_k_text(text_bytes):
     }
     place_no = 0
     for name, no in PLACE_NAME_TO_NO.items():
-        if f"ボートレース{name}" in text or f"ＢＯＡＴ　ＲＡＣＥ{name}" in text or name in text[:200]:
+        if f"ボートレース{name}" in text or f"ＢＯＡＴ　ＲＡＣＥ{name}" in text or name in text[:300]:
             place_no = no
             break
 
-    # 3. レースごとのブロックを分割
-    # 「   1R       予選」のような行からスタート
+    # 2. レースごとの分割
     race_blocks = re.split(r'\n\s*(\d{1,2})R\s+', text)
-    
-    # splitの結果は [ヘッダ, "1", "1Rの中身", "2", "2Rの中身", ...]
     for i in range(1, len(race_blocks), 2):
         race_num = int(race_blocks[i])
         block_content = race_blocks[i+1]
         
-        # 4. 各艇の成績行を抽出
-        # フォーマット例: "  01  1 3527  今泉 57  59 6.87  1  0.13  1.48.5"
-        # 着順 枠番 登番 氏名 モーター ボート 展示 進入 ST タイム
+        # 3. 各艇の成績行を抽出
+        # フォーマット例: 
+        # " 01 1 3527 今泉   徹 57 59 6.87 1 0.13 1.48.5"
+        #  (着) (枠) (登番) (氏名) (モ) (ボ) (展) (進) (ST) (タイム)
         lines = block_content.splitlines()
         for line in lines:
-            # 着順(2桁) 枠番(1桁) 登番(4桁)
-            m = re.match(r'^\s*(\d{2})\s+(\d)\s+(\d{4})', line)
+            # 固定長ベースだが、スペース区切りでも正規表現で抜きやすい形式
+            # 着順(2桁) 枠(1桁) 登番(4桁) 氏名(任意) モーター(2-3桁) ボート(2-3桁) 展示(4桁) 進入(1桁) ST(4桁) タイム(任意)
+            m = re.match(r'^\s*(\d{2})\s+(\d)\s+(\d{4})\s+.+?\s+(\d+)\s+(\d+)\s+(\d\.\d{2})\s+(\d)\s+(\d\.\d{2})', line)
             if m:
-                rank_raw, teiban, player_no = m.groups()
+                rank_raw, teiban, player_no, motor_no, boat_no, show_time, entry_course, st = m.groups()
                 rank = int(rank_raw)
                 records.append({
                     'date': date_str,
@@ -164,17 +158,18 @@ def parse_k_text(text_bytes):
                     'teiban': int(teiban),
                     'rank': rank,
                     'player_no': player_no,
+                    'motor_no': int(motor_no),
+                    'show_time': float(show_time),
+                    'entry_course': int(entry_course),
+                    'st': float(st),
                     'target': 1 if rank == 1 else 0
                 })
-    
     return records
 
-# ──────────────────────────────────────────
-# DB 保存
-# ──────────────────────────────────────────
-def init_db(db_path='data/boatrace.db'):
+def init_db(db_path='data/boatrace_real.db'):
     os.makedirs('data', exist_ok=True)
     conn = sqlite3.connect(db_path)
+    # スキーマを拡張: 詳細データを保存可能にする
     conn.execute("""
     CREATE TABLE IF NOT EXISTS race_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -184,7 +179,12 @@ def init_db(db_path='data/boatrace.db'):
         teiban INTEGER,
         rank INTEGER,
         player_no TEXT,
-        target INTEGER
+        motor_no INTEGER,
+        show_time REAL,
+        entry_course INTEGER,
+        st REAL,
+        target INTEGER,
+        UNIQUE(date, place_no, race_no, teiban)
     )""")
     conn.commit()
     return conn
@@ -193,24 +193,23 @@ def save_records(conn, records):
     cursor = conn.cursor()
     cursor.executemany("""
         INSERT OR IGNORE INTO race_results
-        (date, place_no, race_no, teiban, rank, player_no, target)
-        VALUES (:date, :place_no, :race_no, :teiban, :rank, :player_no, :target)
+        (date, place_no, race_no, teiban, rank, player_no, motor_no, show_time, entry_course, st, target)
+        VALUES (:date, :place_no, :race_no, :teiban, :rank, :player_no, :motor_no, :show_time, :entry_course, :st, :target)
     """, records)
     conn.commit()
     return cursor.rowcount
 
-# ──────────────────────────────────────────
-# メインダウンロードループ
-# ──────────────────────────────────────────
 def download_and_save(start_date, end_date, db_path='data/boatrace_real.db'):
     conn = init_db(db_path)
     headers = {'User-Agent': 'Mozilla/5.0'}
+    sevenz_exe = r"C:\Program Files\7-Zip\7z.exe"
     
+    import subprocess, tempfile
+
     cur_date = start_date
     total_saved = 0
     
     while cur_date <= end_date:
-        # URLフォーマット: k250101.lzh (k + YY + MM + DD)
         yy = cur_date.strftime('%y')
         mm = cur_date.strftime('%m')
         dd = cur_date.strftime('%d')
@@ -220,54 +219,43 @@ def download_and_save(start_date, end_date, db_path='data/boatrace_real.db'):
         url = f'https://www1.mbrace.or.jp/od2/K/{yyyymm}/{fname}'
         
         try:
-            r = requests.get(url, headers=headers, timeout=30) # Increased timeout
-            if r.status_code != 200:
-                # その日は開催なし、翌日へ
-                cur_date += timedelta(days=1)
-                continue
+            r = requests.get(url, headers=headers, timeout=20)
+            if r.status_code == 200:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    lzh_file = os.path.join(tmpdir, fname)
+                    with open(lzh_file, 'wb') as f:
+                        f.write(r.content)
+                    
+                    # 7zで解凍
+                    subprocess.run([sevenz_exe, 'e', lzh_file, f'-o{tmpdir}', '-y'], capture_output=True)
+                    
+                    saved = 0
+                    for out_fname in os.listdir(tmpdir):
+                        if out_fname.upper().endswith('.TXT'):
+                            with open(os.path.join(tmpdir, out_fname), 'rb') as f:
+                                records = parse_k_text(f.read())
+                                if records:
+                                    saved += save_records(conn, records)
+                    
+                    total_saved += saved
+                    if saved > 0:
+                        print(f"  [OK] {cur_date}: {saved} records saved (Total: {total_saved})")
             
-            print(f"  [INFO] {cur_date}: ダウンロード中...", flush=True)
-            # LZH展開
-            extracted = extract_lzh(r.content)
-            if extracted is None:
-                print(f"  [WARN] {cur_date}: LZH展開失敗 (7zが見つからないかエラー)", flush=True)
-                cur_date += timedelta(days=1)
-                time.sleep(0.5)
-                continue
-            
-            saved = 0
-            for fname_in, content in extracted.items():
-                records = parse_k_text(content)
-                if records:
-                    saved += save_records(conn, records)
-            
-            total_saved += saved
-            print(f"  [OK] {cur_date}: {saved} レコード保存 (累計: {total_saved})", flush=True)
-        
         except Exception as e:
-            print(f"  [FATAL] {cur_date} でエラー発生: {e}", flush=True)
+            print(f"  [ERR] {cur_date}: {e}")
         
         cur_date += timedelta(days=1)
-        time.sleep(0.3)  # サーバー負荷軽減
+        time.sleep(0.1)
     
     conn.close()
-    print(f"\n完了！合計 {total_saved} レコードをDBに保存しました。", flush=True)
+    print(f"\nDone. Total {total_saved} records saved.")
 
-# ──────────────────────────────────────────
 if __name__ == '__main__':
-    # デフォルトは直近3ヶ月分を取得
-    # 引数: start_date (YYYYMMDD) end_date (YYYYMMDD)
+    # 直近3ヶ月分
+    end = date.today()
+    start = date.today() - timedelta(days=90)
     if len(sys.argv) >= 3:
         start = date(int(sys.argv[1][:4]), int(sys.argv[1][4:6]), int(sys.argv[1][6:8]))
-        end   = date(int(sys.argv[2][:4]), int(sys.argv[2][4:6]), int(sys.argv[2][6:8]))
-    else:
-        end   = date.today()
-        start = date(end.year - 2, end.month, end.day)  # デフォルト2年分
-    
-    print(f"【競走成績ダウンロード開始】")
-    print(f"  期間: {start} 〜 {end}")
-    print(f"  データURL: https://www1.mbrace.or.jp/od2/K/YYYYMM/kYYMMDD.lzh")
-    print("  ※7-Zipがインストールされていない場合は展開できません")
-    print("  　→ https://www.7-zip.org/ からインストールをお勧めします\n")
+        end = date(int(sys.argv[2][:4]), int(sys.argv[2][4:6]), int(sys.argv[2][6:8]))
     
     download_and_save(start, end)

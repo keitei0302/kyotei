@@ -195,7 +195,6 @@
 
         function setRace(r) {
             document.getElementById('race_no').value = r;
-            // Update UI
             document.querySelectorAll('.race-btn').forEach(btn => {
                 btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-500');
                 btn.classList.add('text-gray-400');
@@ -203,39 +202,24 @@
             const activeBtn = document.getElementById(`btn-race-${r}`);
             activeBtn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-500');
             activeBtn.classList.remove('text-gray-400');
-
-            // Auto fetch? Maybe, but let's just highlight for now. 
-            // The user might want to change place too.
-        }
-
-        function getBoatCastUrl(placeCode) {
-            // boatrace.jpの公式ライブ遷移URLを使用することで、確実に視聴ページへ飛ばす
-            return `https://www.boatrace.jp/owpc/pc/race/live?jcd=${placeCode}`;
         }
 
         async function fetchPrediction() {
             const place = document.getElementById('place').value;
             const race = document.getElementById('race_no').value;
-
             const liveBtn = document.getElementById('live-btn');
-            liveBtn.href = getBoatCastUrl(place);
+            liveBtn.href = `https://www.boatrace.jp/owpc/pc/race/live?jcd=${place}`;
             liveBtn.style.display = 'flex';
 
-            document.getElementById('boat-list').innerHTML = '<div class="glass p-10 text-center">データ取得中...</div>';
+            document.getElementById('boat-list').innerHTML = '<div class="glass p-10 text-center">データ解析中（最新AI搭載）...</div>';
 
             try {
                 const res = await fetch(`/api/predict?place=${place}&race=${race}`);
                 currentData = await res.json();
-                console.log("[DEBUG] API Response Received:", currentData);
-                if (currentData.odds) {
-                    console.log(`[DEBUG] Odds found: ${Object.keys(currentData.odds).length} combinations.`);
-                } else {
-                    console.warn("[DEBUG] No odds property in response.");
-                }
                 renderUI();
                 drawDiagram();
             } catch (e) {
-                console.error("[DEBUG] Fetch Error:", e);
+                console.error("Fetch Error:", e);
             }
         }
 
@@ -249,240 +233,191 @@
             const list = document.getElementById('boat-list');
             list.innerHTML = '';
 
-            // レース結果表示エリアの追加
-            if (currentData.results && currentData.results.rank && currentData.results.rank.length > 0) {
-                const resDiv = document.createElement('div');
-                resDiv.className = "glass p-4 bg-emerald-600/10 border-emerald-500/30 border mb-6 anim-fade-in";
-                const rankText = currentData.results.rank.slice(0, 3).join(' - ');
-                const div3t = currentData.results.dividends["3連単"] || { combo: "---", price: "---" };
+            // 1. レース確定結果（上部に強調）
+            let hitCombo = null;
+            let hitPrice = null;
+            if (currentData.results && currentData.results.rank && currentData.results.rank.length >= 3) {
+                hitCombo = currentData.results.rank.slice(0, 3).join('-');
+                hitPrice = currentData.results.dividends["3連単"]?.price || "---";
 
+                const resDiv = document.createElement('div');
+                resDiv.className = "glass p-4 bg-emerald-600/10 border-emerald-500/30 border mb-6 flex justify-between items-center";
                 resDiv.innerHTML = `
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Race Result</span>
-                            <div class="text-2xl font-bold text-white">${rankText}</div>
-                        </div>
-                        <div class="text-right">
-                            <span class="text-[10px] text-gray-400">3連単 配当</span>
-                            <div class="text-xl font-bold text-orange-400">¥${div3t.price}</div>
-                        </div>
+                    <div>
+                        <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Confirmed Result</span>
+                        <div class="text-3xl font-bold text-white tracking-widest">${hitCombo}</div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] text-gray-400">3連単 払戻金</span>
+                        <div class="text-2xl font-bold text-orange-400">¥${hitPrice}</div>
                     </div>
                 `;
                 list.appendChild(resDiv);
             }
 
+            // 2. 選手リスト（凝縮UI）
+            const header = document.createElement('div');
+            header.className = "hidden md:grid grid-cols-12 gap-4 px-6 text-[10px] text-gray-500 uppercase font-bold mb-2";
+            header.innerHTML = `
+                <div class="col-span-1">艇</div>
+                <div class="col-span-3">選手名 / 勝率 / ST</div>
+                <div class="col-span-3 text-center">展示タイム (差) / Tilt</div>
+                <div class="col-span-2 text-center">AIスコア / M</div>
+                <div class="col-span-3">直感補正</div>
+            `;
+            list.appendChild(header);
+
+            // 平均展示タイム算出（差分用）
+            const showTimes = currentData.players.map(p => {
+                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0 };
+                return parseFloat(bi.show_time || 0);
+            }).filter(t => t > 0);
+            const avgST = showTimes.length ? showTimes.reduce((a, b) => a + b) / showTimes.length : 0;
+
             currentData.players.forEach(p => {
-                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0, tilt: 0 };
+                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0, tilt: 0, propeller: false };
                 const ai = currentData.ai_results.find(r => r.teiban == p.teiban);
+                const st = parseFloat(bi.show_time || 0);
+                const diff = st > 0 && avgST > 0 ? (st - avgST).toFixed(2) : "--";
+                const diffColor = st > 0 && st < avgST ? "text-emerald-400" : (st > avgST ? "text-rose-400" : "text-gray-500");
+                const score = (ai ? (ai.custom_prob || ai.ai_prob) : 0) * 100;
 
                 const card = document.createElement('div');
-                card.className = `glass boat-card p-4 teiban-${p.teiban} flex flex-col md:flex-row items-center gap-6`;
+                card.className = `glass boat-card p-3 teiban-${p.teiban} grid grid-cols-1 md:grid-cols-12 items-center gap-4 mb-2`;
                 card.innerHTML = `
-                    <div class="flex items-center gap-4 w-full md:w-1/3">
-                        <div class="text-4xl font-bold opacity-20 w-8">${p.teiban}</div>
-                        <div>
-                            <div class="font-bold text-lg">${p.name}</div>
-                            <div class="text-xs text-gray-400">勝率:${p.win_rate.toFixed(2)} / ST:${p.ST.toFixed(2)}</div>
-                            <div class="text-[10px] text-indigo-400 font-bold mt-1">${ai && ai.reasoning ? ai.reasoning : ""}</div>
+                    <div class="col-span-1 text-2xl font-black opacity-30 text-center">${p.teiban}</div>
+                    <div class="col-span-3">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-bold text-sm">${p.name}</span>
+                            ${diff < -0.04 ? '<span class="text-[8px] bg-emerald-500/20 text-emerald-400 px-1 rounded border border-emerald-500/30">一番時計</span>' : ''}
+                            ${p.win_rate > 6.5 ? '<span class="text-[8px] bg-indigo-500/20 text-indigo-400 px-1 rounded border border-indigo-500/30">上位</span>' : ''}
+                            ${bi.propeller ? '<span class="text-[8px] bg-orange-500/20 text-orange-400 px-1 rounded border border-orange-500/30">P交換</span>' : ''}
+                        </div>
+                        <div class="text-[10px] text-gray-500">勝率 ${p.win_rate.toFixed(2)} / ST ${p.ST.toFixed(2)}</div>
+                    </div>
+                    <div class="col-span-3 text-center">
+                        <div class="text-xs flex flex-col items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono text-gray-300">${st.toFixed(2)}s</span>
+                                <span class="${diffColor} font-mono">(${diff > 0 ? '+' : ''}${diff})</span>
+                            </div>
+                            <div class="text-[9px] text-gray-500 mt-1">
+                                チルト ${parseFloat(bi.tilt).toFixed(1)}°
+                            </div>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 gap-4 text-center text-xs w-full md:w-1/3">
-                        <div class="glass p-2 bg-white/5 rounded-lg">展示 ${parseFloat(bi.show_time || 0).toFixed(2)}s</div>
-                        <div class="glass p-2 bg-white/5 rounded-lg">Tilt ${parseFloat(bi.tilt || 0).toFixed(1)}</div>
-                        <div class="glass p-2 bg-white/5 rounded-lg">AI ${((ai ? (ai.custom_prob || ai.ai_prob) : 0) * 100).toFixed(1)}pt</div>
-                        <div class="glass p-2 bg-white/5 rounded-lg">M ${p.motor_2ren}%</div>
+                    <div class="col-span-2 text-center">
+                        <div class="text-sm font-bold text-indigo-400">${score.toFixed(1)}<span class="text-[8px] ml-0.5">pt</span></div>
+                        <div class="text-[9px] text-gray-500">モーター ${p.motor_2ren}%</div>
                     </div>
-                    <div class="w-full md:w-1/3">
-                        <div class="flex justify-between text-[10px] text-gray-400 mb-1">
-                            <span>不安</span>
-                            <span>直感補正</span>
-                            <span>期待!</span>
-                        </div>
-                        <input type="range" class="w-full" min="0.5" max="2.0" step="0.1" value="${intuitions[p.teiban]}" 
+                    <div class="col-span-3 px-2">
+                        <input type="range" class="w-full accent-indigo-500" min="0.5" max="2.0" step="0.1" value="${intuitions[p.teiban]}" 
                                oninput="updateIntuition(${p.teiban}, this.value)">
                     </div>
                 `;
                 list.appendChild(card);
             });
 
-            renderRecommendations();
+            renderRecommendations(hitCombo, hitPrice);
         }
 
-        function drawDiagram() {
-            const boatG = document.getElementById('svg-boats');
-            if (!boatG || !currentData || !currentData.ai_results) return;
-
-            boatG.innerHTML = '';
-
-            const boatSrc = "/static/assets/boat.png";
-            const colors = ["#ffffff", "#000000", "#ef4444", "#3b82f6", "#facc15", "#22c55e"];
-
-            // 全6艇分のデータを準備（ai_resultsにない場合も想定）
-            let allBoats = [1, 2, 3, 4, 5, 6].map(t => {
-                const res = currentData.ai_results.find(r => r.teiban == t);
-                const prob = res ? parseFloat(res.ai_prob) : 0.05; // 存在しない場合は微小値を設定
-                return {
-                    teiban: t,
-                    score: prob * (intuitions[t] || 1.0)
-                };
-            }).sort((a, b) => b.score - a.score);
-
-            console.log("Drawing boats:", allBoats);
-
-            allBoats.forEach((s, rank) => {
-                const t = s.teiban;
-                // 画面内に収まるように座標を調整 (viewBox="0 0 500 300")
-                const radius = 60 + (rank * 25);
-                const angle = -40 + (rank * 15);
-
-                const rad = angle * Math.PI / 180;
-                const baseX = 230 + Math.cos(rad) * radius;
-                const baseY = 130 + Math.sin(rad) * radius;
-
-                const boatRotate = angle - 130;
-
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${boatRotate})`);
-
-                g.innerHTML = `
-                    <circle cx="0" cy="0" r="20" fill="${colors[t - 1]}" stroke="#fff" stroke-width="2" />
-                    <image x="-18" y="-18" width="36" height="36" href="${boatSrc}" />
-                    <text x="0" y="5" fill="#000" font-size="14" font-weight="bold" 
-                          text-anchor="middle" transform="rotate(${-boatRotate})">${t}</text>
-                `;
-                boatG.appendChild(g);
-            });
-        }
-
-        function renderRecommendations() {
-            console.log("[DEBUG] renderRecommendations call.");
+        function renderRecommendations(hitCombo, hitPrice) {
             const container = document.getElementById('recommendations');
             container.innerHTML = '';
+            if (!currentData || !currentData.ai_results) return;
 
-            if (!currentData || !currentData.ai_results || currentData.ai_results.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-500 py-4 italic">分析データがありません</div>';
-                return;
-            }
-
-            // 1. 各艇の補正後スコアを算出
             let scores = {};
             let total = 0;
             currentData.ai_results.forEach(r => {
-                const weight = (intuitions[r.teiban] || 1.0);
-                const baseProb = r.custom_prob || r.ai_prob || 0.01;
-                const finalScore = baseProb * weight;
-                scores[r.teiban] = finalScore;
-                total += finalScore;
+                const w = intuitions[r.teiban] || 1.0;
+                const s = (r.custom_prob || r.ai_prob || 0.01) * w;
+                scores[r.teiban] = s;
+                total += s;
             });
-
             if (total === 0) total = 1;
 
             let topBets = [];
             const hasOdds = currentData.odds && Object.keys(currentData.odds).length > 0;
 
             if (hasOdds) {
-                // オッズがある場合：期待値（EV）順
-                console.log(`[DEBUG] Rendering with ${Object.keys(currentData.odds).length} odds.`);
-                let bets = [];
                 Object.entries(currentData.odds).forEach(([combo, odds]) => {
-                    const parts = combo.split('-');
-                    if (parts.length < 3) return;
-                    const [t1, t2, t3] = parts.map(Number);
-
-                    // 3連単の積の法則で確率を近似
-                    const p1 = (scores[t1] || 0) / total;
-                    const p2 = (scores[t2] || 0) / (total - (scores[t1] || 0) || 1);
-                    const p3 = (scores[t3] || 0) / (total - (scores[t1] || 0) - (scores[t2] || 0) || 1);
-
+                    const [t1, t2, t3] = combo.split('-').map(Number);
+                    const p1 = scores[t1] / total;
+                    const p2 = scores[t2] / (total - scores[t1] || 1);
+                    const p3 = scores[t3] / (total - scores[t1] - scores[t2] || 1);
                     const prob = p1 * p2 * p3;
-                    const ev = prob * odds;
-                    bets.push({ combo, prob, odds, ev });
+                    topBets.push({ combo, prob, odds, ev: prob * odds });
                 });
-                topBets = bets.sort((a, b) => b.ev - a.ev).slice(0, 8);
-            }
-
-            // オッズがない、またはオッズ計算結果が空の場合：AIスコア順で補完
-            if (topBets.length === 0) {
-                console.log("[DEBUG] Rendering with AI Score Base (No Odds).");
-                const sortedTeibans = Object.entries(scores)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(e => Number(e[0]));
-
-                if (sortedTeibans.length >= 3) {
-                    const t1 = sortedTeibans[0], t2 = sortedTeibans[1], t3 = sortedTeibans[2];
-                    const t4 = sortedTeibans[3] || 4, t5 = sortedTeibans[4] || 5;
-                    // 代表的な組み合わせを生成
-                    const patterns = [
-                        `${t1}-${t2}-${t3}`, `${t1}-${t2}-${t4}`, `${t1}-${t3}-${t2}`, `${t1}-${t3}-${t4}`,
-                        `${t2}-${t1}-${t3}`, `${t2}-${t1}-${t4}`, `${t1}-${t2}-${t5}`, `${t1}-${t4}-${t2}`
-                    ];
-                    topBets = patterns.map(c => ({ combo: c, prob: 0, odds: 0, ev: 0 }));
+                topBets.sort((a, b) => b.ev - a.ev);
+            } else {
+                // オッズがない場合：AI軸8点
+                const top6 = Object.entries(scores).sort((a, b) => b[1] - a[1]).map(e => Number(e[0]));
+                const axis = top6[0], others = top6.slice(1);
+                for (let j of others) {
+                    for (let k of others) {
+                        if (j === k) continue;
+                        topBets.push({ combo: `${axis}-${j}-${k}`, ev: 0, odds: 0 });
+                        if (topBets.length >= 8) break;
+                    }
+                    if (topBets.length >= 8) break;
                 }
             }
 
-            // 3. 描画
-            topBets.forEach(b => {
+            topBets.slice(0, 8).forEach((b, i) => {
+                const isHit = b.combo === hitCombo;
                 const div = document.createElement('div');
-                div.className = "flex justify-between items-center p-3 rounded-lg " +
-                    (b.ev > 1.2 ? "bg-indigo-500/20 border border-indigo-500/30 shadow-indigo-500/10 shadow-lg" : "bg-white/5 border border-white/5");
-
-                const oddsText = b.odds > 0 ? `Odds ${b.odds.toFixed(1)}` : "Odds --";
-                const evText = b.ev > 0 ? `EV ${b.ev.toFixed(2)}` : "AI Score Base";
-                const probText = b.prob > 0 ? `${(b.prob * 100).toFixed(1)}%` : "";
+                div.className = `flex justify-between items-center p-3 rounded-lg border transition-all ${isHit ? 'bg-emerald-500/20 border-emerald-500 shadow-lg scale-[1.02]' : 'bg-white/5 border-white/10'}`;
 
                 div.innerHTML = `
-                    <div class="font-bold text-lg tracking-wider">${b.combo}</div>
+                    <div class="flex items-center gap-3">
+                        <div class="text-lg font-black tracking-widest">${b.combo}</div>
+                        ${isHit ? `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce">的中！ ¥${hitPrice}</span>` : ''}
+                    </div>
                     <div class="text-right">
-                        <div class="text-xs text-indigo-400 font-bold">${evText}</div>
-                        <div class="text-[10px] text-gray-500">${oddsText} <span class="ml-1 opacity-60">${probText}</span></div>
+                        <div class="text-[10px] text-gray-500">${b.odds > 0 ? b.odds.toFixed(1) + '倍' : 'AI予測軸'}</div>
+                        <div class="text-xs font-bold ${b.ev > 1.2 ? 'text-indigo-400' : 'text-gray-400'}">${b.ev > 0 ? 'EV ' + b.ev.toFixed(2) : '---'}</div>
                     </div>
                 `;
                 container.appendChild(div);
             });
+        }
 
-            // [DEBUG_FOCUS_ANCHOR] ユーザー独自の買い方表示 (不安=0.5 の艇を完全に除外)
-            const allSorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-            const filteredTeiban = allSorted
-                .filter(e => (intuitions[e[0]] || 1.0) > 0.51)
-                .map(e => e[0]);
+        function drawDiagram() {
+            const boatG = document.getElementById('svg-boats');
+            if (!boatG || !currentData) return;
+            boatG.innerHTML = '';
+            const colors = ["#ffffff", "#000000", "#ef4444", "#3b82f6", "#facc15", "#22c55e"];
 
-            const aiFavTeiban = currentData.ai_results
-                .filter(r => (intuitions[r.teiban] || 1.0) > 0.51)
-                .sort((a, b) => {
-                    const scoreA = a.custom_prob !== undefined ? a.custom_prob : a.ai_prob;
-                    const scoreB = b.custom_prob !== undefined ? b.custom_prob : b.ai_prob;
-                    console.log(`[DEBUG-FOCUS] Comparing ${a.teiban}(${scoreA}) vs ${b.teiban}(${scoreB})`);
-                    return scoreB - scoreA;
-                })
-                .map(r => r.teiban);
-            console.log("[DEBUG-FOCUS] aiFavTeiban (Type A):", aiFavTeiban);
+            let allBoats = [1, 2, 3, 4, 5, 6].map(t => {
+                const res = currentData.ai_results.find(r => r.teiban == t);
+                const s = (res ? (res.custom_prob || res.ai_prob) : 0.05) * (intuitions[t] || 1.0);
+                return { teiban: t, score: s };
+            }).sort((a, b) => b.score - a.score);
 
-            if (filteredTeiban.length >= 4 && aiFavTeiban.length >= 4) {
-                const a1 = aiFavTeiban[0], a2 = aiFavTeiban[1], a3 = aiFavTeiban[2], a4 = aiFavTeiban[3];
-                const t1 = filteredTeiban[0], t2 = filteredTeiban[1], t3 = filteredTeiban[2], t4 = filteredTeiban[3];
-                const specialDiv = document.createElement('div');
-                specialDiv.className = "mt-6 p-4 border-t border-white/10 space-y-4";
-                specialDiv.innerHTML = `
-                    <h3 class="text-sm font-bold text-indigo-400 mb-2">直感フォーカス</h3>
-                    
-                    <div class="space-y-2">
-                        <p class="text-[10px] text-gray-400 uppercase tracking-tighter">【タイプA: 本命】AI評価重視</p>
-                        <div class="text-2xl font-bold tracking-widest text-center glass py-3 bg-indigo-600/20 border border-indigo-500/30 rounded-xl">
-                            ${a1}${a2}-${a1}${a2}=${a3}${a4}
-                        </div>
-                    </div>
+            allBoats.forEach((s, rank) => {
+                const t = s.teiban;
+                const radius = 60 + (rank * 25);
+                const angle = -40 + (rank * 15);
+                const rad = angle * Math.PI / 180;
+                const baseX = 230 + Math.cos(rad) * radius;
+                const baseY = 130 + Math.sin(rad) * radius;
+                const boatRotate = angle - 130;
 
-                    <div class="space-y-2">
-                        <p class="text-[10px] text-gray-400 uppercase tracking-tighter">【タイプB: 穴狙い】直感スコア重視</p>
-                        <div class="text-2xl font-bold tracking-widest text-center glass py-3 bg-emerald-600/20 border border-emerald-500/30 rounded-xl">
-                            ${t1}-${t2}${t3}${t4}-${t2}${t3}${t4}
-                        </div>
-                    </div>
+                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${boatRotate})`);
+                g.innerHTML = `
+                    <circle cx="0" cy="0" r="18" fill="${colors[t - 1]}" stroke="#fff" stroke-width="1.5" />
+                    <text x="0" y="5" fill="${t == 2 ? '#fff' : '#000'}" font-size="14" font-weight="bold" 
+                          text-anchor="middle" transform="rotate(${-boatRotate})">${t}</text>
                 `;
-                container.appendChild(specialDiv);
-            }
+                boatG.appendChild(g);
+            });
         }
     </script>
+</body>
+
+</html>
+</script>
 </body>
 
 </html>

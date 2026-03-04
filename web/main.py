@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from keitei_app import get_today_players, get_beforeinfo, get_odds3t, get_race_result
 import pickle
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 app = FastAPI()
 
@@ -26,11 +26,15 @@ from concurrent.futures import ThreadPoolExecutor
 
 @app.get("/api/predict")
 async def predict(place: str, race: int):
-    today_str = datetime.now().strftime("%Y%m%d")
-    print(f"\n[API] Processing Race: {place}#{race} at {datetime.now().time()}")
+    # 1. 日付計算（午前5時以前は前日分を取得）
+    # 日本時間 (JST) を取得 (UTC+9)
+    now_jst = datetime.utcnow() + timedelta(hours=9)
+    today_str = (now_jst - (timedelta(days=1) if now_jst.hour < 5 else timedelta(0))).strftime("%Y%m%d")
+    
+    print(f"\n[API] Processing Race: {place}#{race} (Date: {today_str})")
     
     with ThreadPoolExecutor(max_workers=10) as executor:
-        # 1. 基本情報の並列取得
+        # 基本情報の並列取得
         f_players = executor.submit(get_today_players, place, race, today_str)
         f_before = executor.submit(get_beforeinfo, place, race, today_str)
         f_odds = executor.submit(get_odds3t, place, race, today_str)
@@ -40,47 +44,29 @@ async def predict(place: str, race: int):
         beforeinfo = f_before.result()
         odds3t = f_odds.result()
         results = f_result.result()
-        
-        # 2. 選手ごとの戦術データの並列取得
-        from keitei_app import get_kimari_te, analyze_race_tactics
-        kimari_te_data = {}
-        if players:
-            futures_kimari = {
-                p['teiban']: executor.submit(get_kimari_te, p['toban']) 
-                for p in players if 'toban' in p and p['toban'] != "0"
-            }
-            for teiban, f in futures_kimari.items():
-                kimari_te_data[teiban] = f.result()
-            
-    # モデルの読み込み
-    with open("models/lgb_model.pkl", "rb") as f:
-        model = pickle.load(f)
-        
-    records = []
-    for p in (players or []):
-        bi = beforeinfo.get(p['teiban'], {'show_time': 0.0, 'tilt': 0.0})
-        records.append({
-            'place_no': place, 'race_no': race, 'teiban': p['teiban'],
-            'ST': p['ST'], 'F': p['F'], 'L': p['L'], 'win_rate': p['win_rate'],
-            'motor_2ren': p['motor_2ren'], 'show_time': bi['show_time'], 'tilt': bi['tilt'],
-        })
-        
-    df_pred = pd.DataFrame(records)
-    if not df_pred.empty:
-        for col in ['place_no', 'race_no', 'teiban']:
-            df_pred[col] = df_pred[col].astype('category')
-        predictions = model.predict(df_pred[['place_no', 'race_no', 'teiban']])
-        df_pred['ai_prob'] = predictions
-        df_pred = analyze_race_tactics(df_pred, kimari_te_data)
-        
-    print(f"[API] Process Complete. Odds Count: {len(odds3t)}")
+
+    if not players:
+        return {"error": "No players found"}
+
+    # 2. 予測ロジックの実行 (keitei_app.py と同期)
+    from keitei_app import predict_race, apply_user_intuition
+    df = pd.DataFrame(players)
+    # predict_race 内で beforeinfo も加味される
+    df = predict_race(place, race, today_str, df)
+    df = apply_user_intuition(df)
+    df['final_score'] = df['custom_prob']
+
+    # 3. 買い目データの整理（オッズがある場合とない場合）
+    # フロントエンド側で的中判定しやすいようにデータを送る
+    
+    print(f"[API] Process Complete. Odds Count: {len(odds3t) if odds3t else 0}")
     return {
         "players": players,
         "beforeinfo": beforeinfo,
         "odds": odds3t,
         "results": results,
-        "ai_results": df_pred.to_dict(orient="records"),
-        "kimari_te": kimari_te_data
+        "ai_results": df.to_dict(orient="records"),
+        "debug": {"date": today_str}
     }
 
 if __name__ == "__main__":

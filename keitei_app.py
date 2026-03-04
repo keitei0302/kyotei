@@ -219,6 +219,19 @@ def get_today_players(place_no, race_no, date_str):
     try:
         res = requests.get(url, headers=headers)
         soup = BeautifulSoup(res.content, 'html.parser')
+        
+        # 締切予定時刻の取得
+        deadline = ""
+        th = soup.find('th', string=lambda s: s and '締切予定時刻' in s)
+        if th:
+            table = th.find_parent('table')
+            if table:
+                trs = table.find_all('tr')
+                if len(trs) >= 2:
+                    times = [td.text.strip() for td in trs[1].find_all('td')]
+                    if len(times) >= int(race_no):
+                        deadline = times[int(race_no)-1]
+
         results = []
         tbodies = soup.find_all('tbody', class_='is-fs12')
         for i, tbody in enumerate(tbodies[:6]): 
@@ -234,7 +247,7 @@ def get_today_players(place_no, race_no, date_str):
                     p['win_rate'] = float(tds[4].text.split()[0]) if tds[4].text.split() else 0.0
                     p['motor_2ren'] = float(tds[6].text.split()[1]) if len(tds[6].text.split()) > 1 else 0.0
             results.append(p)
-        return results if len(results) == 6 else None
+        return {"players": results, "deadline": deadline} if len(results) == 6 else None
     except: return None
 
 # ──────────────────────────────────────────
@@ -349,10 +362,7 @@ def draw_slit_diagram(players):
     print(" |" + "-"*40)
 
 def display_condensed_info(players, beforeinfo, df_pred):
-    """情報を1行に凝縮表示"""
-    print("\n" + "="*85)
-    print(f"{'艇':<2} {'選手名':<15} {'勝率/ST':<12} {'展示(差)':<13} {'総合スコア':<12} {'気配'}")
-    print("-" * 85)
+    """情報を1行に凝縮表示（ヘッダーはmain側で出力）"""
     show_times = [bi.get('show_time', 0.0) for bi in beforeinfo.values() if bi.get('show_time', 0.0) > 0]
     avg = sum(show_times) / len(show_times) if show_times else 0
     for p in players:
@@ -386,8 +396,10 @@ def main():
     target_date = now_jst - (timedelta(days=1) if now_jst.hour < 5 else timedelta(0))
     d_str = target_date.strftime("%Y%m%d")
 
-    players = get_today_players(p_no, r_no, d_str)
-    if not players: return
+    p_data = get_today_players(p_no, r_no, d_str)
+    if not p_data: return
+    players = p_data["players"]
+    deadline = p_data["deadline"]
     
     before = get_beforeinfo(p_no, r_no, d_str)
     df = pd.DataFrame(players)
@@ -407,6 +419,12 @@ def main():
             bet_results.append({'combo':c, 'prob':p1*p2*p3, 'odds':v, 'ev':p1*p2*p3*v})
     
     df_bets = pd.DataFrame(bet_results)
+    
+    # 締切時刻をヘッダーに表示
+    time_header = f"  【 {deadline} 締切 】" if deadline else ""
+    print(f"\n{'='*30}{time_header}{'='*(55-len(time_header))}")
+    print(f"{'艇':<2} {'選手名':<15} {'勝率/ST':<12} {'展示(差)':<13} {'総合スコア':<12} {'気配'}")
+    print("-" * 85)
     display_condensed_info(players, before, df)
     draw_slit_diagram(players)
 

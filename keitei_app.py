@@ -126,9 +126,9 @@ def get_race_result(place_no, race_no, date_str):
         full_text = soup.get_text(separator=' ')
 
         # ── 3連単配当の取得 ──
-        # 例: "3連単 1 - 3 - 2 ¥620" or "3連単 1-3-2 620円"
+        # より柔軟な正規表現（セパレータが ハイフン、エンダッシュ、マイナス等に対応）
         div_pat = re.search(
-            r'3連単\s+(\d)\s*[-–]\s*(\d)\s*[-–]\s*(\d)\s+[¥￥]?([\d,]+)',
+            r'3連単\s+(\d)\s*[-–－—]\s*(\d)\s*[-–－—]\s*(\d)\s+[¥￥]?([\d,]+)',
             full_text
         )
         if div_pat:
@@ -137,7 +137,9 @@ def get_race_result(place_no, race_no, date_str):
             t3 = int(div_pat.group(3))
             combo = f"{t1}-{t2}-{t3}"
             result["rank"] = [t1, t2, t3]  # 3連単の組番 = 1〜3着
-            result["dividends"]["3連単"] = {"combo": combo, "price": div_pat.group(4)}
+            # カンマを除去せずに、表示用としてそのまま保存（または統一して数字のみにする）
+            price_clean = div_pat.group(4).replace(',', '')
+            result["dividends"]["3連単"] = {"combo": combo, "price": f"{int(price_clean):,}"}
 
         # ── フォールバック: CSSクラス is-isN から着順を取得 ──
         if not result["rank"]:
@@ -146,18 +148,21 @@ def get_race_result(place_no, race_no, date_str):
             for table in soup.find_all('table'):
                 for tr in table.find_all('tr'):
                     tds = tr.find_all('td')
-                    if not tds: continue
+                    if len(tds) < 1: continue
+                    # 1着〜3着の文字を探す
                     raw = tds[0].get_text(strip=True)
                     rank_num = ZENKAKU_MAP.get(raw) or (int(raw) if raw.isdigit() and 1 <= int(raw) <= 3 else None)
                     if rank_num is None: continue
+                    
+                    # その行から艇番を探す
                     for td in tds:
                         cls_str = ' '.join(td.get('class', []))
                         for k in range(1, 7):
                             if f'is-is{k}' in cls_str:
                                 ranks[rank_num] = k; break
                         if rank_num in ranks: break
-            if ranks:
-                result["rank"] = [ranks[i] for i in sorted(ranks.keys())]
+            if ranks and len(ranks) >= 3:
+                result["rank"] = [ranks[i] for i in sorted(ranks.keys()) if i in ranks][:3]
 
     except Exception as e:
         print(f"[Result] Error: {e}")

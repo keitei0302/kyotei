@@ -10,6 +10,8 @@ import os
 import re
 import json
 import numpy as np
+from playwright.sync_api import sync_playwright
+
 
 warnings.filterwarnings("ignore")
 
@@ -28,7 +30,7 @@ def get_beforeinfo(place_no, race_no, date_str):
     url = f"https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno={race_no}&jcd={place_no}&hd={date_str}"
     headers = {'User-Agent': 'Mozilla/5.0'}
     # propeller: 新プロペラの場合は True
-    result = {i: {'show_time': 0.0, 'tilt': 0.0, 'propeller': False} for i in range(1, 7)}
+    result = {i: {'show_time': 0.0, 'tilt': 0.0, 'propeller': False, 'lap_time': 0.0, 'turn_time': 0.0, 'straight_time': 0.0} for i in range(1, 7)}
     try:
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.content, 'html.parser')
@@ -73,6 +75,44 @@ def get_beforeinfo(place_no, race_no, date_str):
                             if "新" in tds[1].get_text():
                                 result[t_num]['propeller'] = True
                         except: pass
+        # 3. オリジナル展示タイムの取得 (Boatcastのテキストデータから取得)
+        try:
+            race_no_str = str(race_no).zfill(2)
+            place_no_str = str(place_no).zfill(2)
+            boatcast_url = f"https://race.boatcast.jp/txt/{place_no_str}/bc_oriten_{date_str}_{place_no_str}_{race_no_str}.txt"
+            
+            text = ""
+            try:
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=True)
+                    page = browser.new_page()
+                    res_bc = page.goto(boatcast_url, timeout=10000)
+                    if res_bc and res_bc.ok:
+                        text = page.evaluate("() => document.body.innerText")
+                    else:
+                        status = res_bc.status if res_bc else "Timeout"
+                        print(f"[BeforeInfo] Boatcast Original Times not found (Status {status})")
+                    browser.close()
+            except Exception as e:
+                print(f"[Playwright Error] {e}")
+            
+            if text:
+                lines = text.strip().split('\n')
+                for line in lines:
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        try:
+                            # フォーマット: 1  岩瀬  裕亮  36.30  6.03  6.43
+                            t_num = int(parts[0])
+                            if 1 <= t_num <= 6:
+                                result[t_num]['straight_time'] = float(parts[-1])
+                                result[t_num]['turn_time'] = float(parts[-2])
+                                result[t_num]['lap_time'] = float(parts[-3])
+                        except ValueError:
+                            pass
+        except Exception as e:
+            print(f"[BeforeInfo] Original Times Error: {e}")
+
     except Exception as e:
         print(f"[BeforeInfo] Error: {e}")
     return result
@@ -223,10 +263,16 @@ def predict_race(place_no, race_no, date_str, players_df):
         players_df['ai_prob'] = model.predict(X.values.astype(np.float32))
         players_df['show_time'] = [before_info.get(int(t), {}).get('show_time', 0.0) for t in players_df['teiban']]
         players_df['propeller'] = [before_info.get(int(t), {}).get('propeller', False) for t in players_df['teiban']]
+        players_df['lap_time'] = [before_info.get(int(t), {}).get('lap_time', 0.0) for t in players_df['teiban']]
+        players_df['turn_time'] = [before_info.get(int(t), {}).get('turn_time', 0.0) for t in players_df['teiban']]
+        players_df['straight_time'] = [before_info.get(int(t), {}).get('straight_time', 0.0) for t in players_df['teiban']]
     except:
         players_df['ai_prob'] = 1/6
         players_df['show_time'] = 0.0
         players_df['propeller'] = False
+        players_df['lap_time'] = 0.0
+        players_df['turn_time'] = 0.0
+        players_df['straight_time'] = 0.0
     return players_df
 
 def apply_user_intuition(df_pred):
@@ -253,6 +299,37 @@ def apply_user_intuition(df_pred):
                 # 新プロペラ交換後は気配が変わることが多いため、少しスコアを下げる（または要警戒とする）
                 # ここでは保守的に -3% の補正
                 df_pred.at[i, 'custom_prob'] -= 0.03
+                
+    # 3. オリジナル展示タイムによる補正
+    if 'lap_time' in df_pred.columns:
+        valid = df_pred[df_pred['lap_time'] > 0]
+        if len(valid) >= 3:
+            avg = valid['lap_time'].mean()
+            for i, row in df_pred.iterrows():
+                if row['lap_time'] <= 0: continue
+                # 一周タイムの差分 (総合力: 係数0.2)
+                diff = avg - row['lap_time']
+                df_pred.at[i, 'custom_prob'] += diff * 0.2
+
+    if 'turn_time' in df_pred.columns:
+        valid = df_pred[df_pred['turn_time'] > 0]
+        if len(valid) >= 3:
+            avg = valid['turn_time'].mean()
+            for i, row in df_pred.iterrows():
+                if row['turn_time'] <= 0: continue
+                # まわり足の差分 (出足: 係数0.5)
+                diff = avg - row['turn_time']
+                df_pred.at[i, 'custom_prob'] += diff * 0.5
+
+    if 'straight_time' in df_pred.columns:
+        valid = df_pred[df_pred['straight_time'] > 0]
+        if len(valid) >= 3:
+            avg = valid['straight_time'].mean()
+            for i, row in df_pred.iterrows():
+                if row['straight_time'] <= 0: continue
+                # 直線タイムの差分 (伸び: 係数1.0)
+                diff = avg - row['straight_time']
+                df_pred.at[i, 'custom_prob'] += diff * 1.0
 
     df_pred['custom_prob'] = df_pred['custom_prob'].clip(lower=0.01)
     return df_pred

@@ -8,3 +8,4 @@ pandas
 lightgbm
 scikit-learn
 pickle-mixin
+playwright

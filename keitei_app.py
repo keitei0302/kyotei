@@ -47,16 +47,19 @@ def get_beforeinfo(place_no, race_no, date_str):
                 all_tds = tbody.find_all('td')
                 for td in all_tds:
                     val_str = td.get_text(strip=True)
-                    # 展示タイム: 6.xx
+                    # 展示タイム: 6.xx (6.00 〜 8.00)
                     if re.match(r'^\d\.\d{2}$', val_str):
                         val = float(val_str)
                         if 6.0 <= val <= 8.0: result[t_num]['show_time'] = val
-                    # チルト角度: -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 3 などの多様な形式に対応
-                    elif re.match(r'^[-+]?\d(\.\d)?$', val_str) or val_str in ["0", "1", "2", "3"]:
+                    # チルト角度: -0.5, 0.0, 0, 1, 1.5, 2, 3 等
+                    # 正規表現を緩和: 符号(任意) + 数字1桁 + 小数点部分(任意)
+                    elif re.match(r'^[-+]?\d(\.\d)?$', val_str):
                         try:
                             val = float(val_str)
-                            # 競艇のチルト範囲（通常 -0.5 ～ 3.0）をカバー
-                            if -1.0 <= val <= 3.0: result[t_num]['tilt'] = val
+                            # 競艇のチルト範囲（通常 -0.5 〜 3.0）
+                            # 展示タイムと誤認しないように 5.0 未満に限定
+                            if -0.5 <= val <= 3.0: 
+                                result[t_num]['tilt'] = val
                         except: pass
             except: pass
 

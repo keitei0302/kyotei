@@ -49,10 +49,11 @@ def get_beforeinfo(place_no, race_no, date_str):
                     if re.match(r'^\d\.\d{2}$', val_str):
                         val = float(val_str)
                         if 6.0 <= val <= 8.0: result[t_num]['show_time'] = val
-                    # チルト角度: -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0 など
-                    elif re.match(r'^[-+]?\d\.\d$', val_str) or val_str in ["0", "1", "2", "3"]:
+                    # チルト角度: -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 3 などの多様な形式に対応
+                    elif re.match(r'^[-+]?\d(\.\d)?$', val_str) or val_str in ["0", "1", "2", "3"]:
                         try:
                             val = float(val_str)
+                            # 競艇のチルト範囲（通常 -0.5 ～ 3.0）をカバー
                             if -1.0 <= val <= 3.0: result[t_num]['tilt'] = val
                         except: pass
             except: pass

@@ -403,7 +403,12 @@ def main():
     d_str = target_date.strftime("%Y%m%d")
 
     p_data = get_today_players(p_no, r_no, d_str)
-    if not p_data: return
+    if not p_data:
+        place_name = [k for k, v in places.items() if v == p_no]
+        p_name = place_name[0] if place_name else p_no
+        print(f"\n[エラー] {p_name} {r_no}R の出走表データが取得できませんでした。")
+        print("本日の開催がないか、レースが終了している可能性があります。対象のレース場が本日開催しているかご確認ください。")
+        return
     players = p_data["players"]
     deadline = p_data["deadline"]
     

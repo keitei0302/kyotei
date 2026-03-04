@@ -48,9 +48,11 @@ async def predict(place: str, race: int):
     if not players:
         return {"error": "No players found"}
 
+    players_list = players.get("players", []) if isinstance(players, dict) else players
+
     # 2. 予測ロジックの実行 (keitei_app.py と同期)
     from keitei_app import predict_race, apply_user_intuition
-    df = pd.DataFrame(players)
+    df = pd.DataFrame(players_list)
     # predict_race 内で beforeinfo も加味される
     df = predict_race(place, race, today_str, df)
     df = apply_user_intuition(df)
@@ -61,7 +63,7 @@ async def predict(place: str, race: int):
     
     print(f"[API] Process Complete. Odds Count: {len(odds3t) if odds3t else 0}")
     return {
-        "players": players,
+        "players": players_list,
         "beforeinfo": beforeinfo,
         "odds": odds3t,
         "results": results,

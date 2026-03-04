@@ -233,6 +233,14 @@
             const list = document.getElementById('boat-list');
             list.innerHTML = '';
 
+            if (currentData.error) {
+                list.innerHTML = `<div class="glass p-10 text-center text-rose-400 font-bold text-lg">⚠️ 出走表データが取得できませんでした。<br><br><span class="text-sm text-gray-400">本日の開催がないか、レースが終了している可能性があります。<br>対象のレース場が本日開催しているかご確認ください。</span></div>`;
+                document.getElementById('recommendations').innerHTML = '';
+                const boatG = document.getElementById('svg-boats');
+                if (boatG) boatG.innerHTML = '';
+                return;
+            }
+
             // 1. レース確定結果（上部に強調）
             let hitCombo = null;
             let hitPrice = null;
@@ -260,26 +268,42 @@
             header.className = "hidden md:grid grid-cols-12 gap-4 px-6 text-[10px] text-gray-500 uppercase font-bold mb-2";
             header.innerHTML = `
                 <div class="col-span-1">艇</div>
-                <div class="col-span-3">選手名 / 勝率 / ST</div>
-                <div class="col-span-3 text-center">展示タイム (差) / Tilt</div>
+                <div class="col-span-3">選手・成績</div>
+                <div class="col-span-4 text-center">展示・オリジナルタイム・Tilt</div>
                 <div class="col-span-2 text-center">AIスコア / M</div>
-                <div class="col-span-3">直感補正</div>
+                <div class="col-span-2 text-center">直感補正</div>
             `;
             list.appendChild(header);
 
             // 平均展示タイム算出（差分用）
-            const showTimes = currentData.players.map(p => {
-                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0 };
-                return parseFloat(bi.show_time || 0);
-            }).filter(t => t > 0);
-            const avgST = showTimes.length ? showTimes.reduce((a, b) => a + b) / showTimes.length : 0;
+            const getAvg = (key) => {
+                const times = currentData.players.map(p => {
+                    const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || {};
+                    return parseFloat(bi[key] || 0);
+                }).filter(t => t > 0);
+                return times.length ? times.reduce((a, b) => a + b) / times.length : 0;
+            };
+            const avgST = getAvg('show_time');
+            const avgLap = getAvg('lap_time');
+            const avgTurn = getAvg('turn_time');
+            const avgStr = getAvg('straight_time');
 
             currentData.players.forEach(p => {
-                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0, tilt: 0, propeller: false };
+                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0, tilt: 0, propeller: false, lap_time: 0, turn_time: 0, straight_time: 0 };
                 const ai = currentData.ai_results.find(r => r.teiban == p.teiban);
                 const st = parseFloat(bi.show_time || 0);
                 const diff = st > 0 && avgST > 0 ? (st - avgST).toFixed(2) : "--";
                 const diffColor = st > 0 && st < avgST ? "text-emerald-400" : (st > avgST ? "text-rose-400" : "text-gray-500");
+
+                const lap = parseFloat(bi.lap_time || 0);
+                const turn = parseFloat(bi.turn_time || 0);
+                const strt = parseFloat(bi.straight_time || 0);
+
+                let origTags = [];
+                if (lap > 0 && avgLap > 0 && lap < avgLap - 0.1) origTags.push('<span class="text-[8px] bg-blue-500/20 text-blue-400 px-1 rounded border border-blue-500/30">総合◎</span>');
+                if (turn > 0 && avgTurn > 0 && turn < avgTurn - 0.05) origTags.push('<span class="text-[8px] bg-amber-500/20 text-amber-400 px-1 rounded border border-amber-500/30">出足◎</span>');
+                if (strt > 0 && avgStr > 0 && strt < avgStr - 0.03) origTags.push('<span class="text-[8px] bg-rose-500/20 text-rose-400 px-1 rounded border border-rose-500/30">伸び◎</span>');
+
                 const score = (ai ? (ai.custom_prob || ai.ai_prob) : 0) * 100;
 
                 const card = document.createElement('div');
@@ -293,24 +317,38 @@
                             ${p.win_rate > 6.5 ? '<span class="text-[8px] bg-indigo-500/20 text-indigo-400 px-1 rounded border border-indigo-500/30">上位</span>' : ''}
                             ${bi.propeller ? '<span class="text-[8px] bg-orange-500/20 text-orange-400 px-1 rounded border border-orange-500/30">P交換</span>' : ''}
                         </div>
-                        <div class="text-[10px] text-gray-500">勝率 ${p.win_rate.toFixed(2)} / ST ${p.ST.toFixed(2)}</div>
+                        <div class="text-[10px] text-gray-500 mt-1">勝率 ${p.win_rate.toFixed(2)} / ST ${p.ST.toFixed(2)}</div>
+                        <div class="flex items-center gap-1 mt-1 flex-wrap">
+                            ${origTags.join('')}
+                        </div>
                     </div>
-                    <div class="col-span-3 text-center">
-                        <div class="text-xs flex flex-col items-center">
-                            <div class="flex items-center gap-2">
-                                <span class="font-mono text-gray-300">${st.toFixed(2)}s</span>
-                                <span class="${diffColor} font-mono">(${diff > 0 ? '+' : ''}${diff})</span>
+                    <div class="col-span-4 text-center">
+                        <div class="text-xs flex flex-row justify-center items-center gap-4">
+                            <div class="flex flex-col items-center">
+                                <span class="text-[9px] text-gray-500 mb-0.5">展示</span>
+                                <div class="flex items-center gap-1">
+                                    <span class="font-mono text-gray-300 font-bold">${st > 0 ? st.toFixed(2) : '-.--'}</span>
+                                    <span class="${diffColor} font-mono text-[10px]">(${diff > 0 ? '+' : ''}${diff !== '--' ? diff : '-'})</span>
+                                </div>
                             </div>
-                            <div class="text-[9px] text-gray-500 mt-1">
-                                チルト ${parseFloat(bi.tilt).toFixed(1)}°
+                            <div class="flex flex-col items-center border-l border-white/10 pl-4">
+                                <span class="text-[9px] text-gray-500 mb-0.5">周 / 回 / 直</span>
+                                <div class="font-mono text-gray-400 text-[10px] flex gap-1">
+                                    <span>${lap > 0 ? lap.toFixed(2) : '-.--'}</span> <span class="opacity-50">/</span>
+                                    <span>${turn > 0 ? turn.toFixed(2) : '-.--'}</span> <span class="opacity-50">/</span>
+                                    <span>${strt > 0 ? strt.toFixed(2) : '-.--'}</span>
+                                </div>
                             </div>
+                        </div>
+                        <div class="text-[9px] text-gray-500 mt-1">
+                            チルト ${parseFloat(bi.tilt).toFixed(1)}°
                         </div>
                     </div>
                     <div class="col-span-2 text-center">
                         <div class="text-sm font-bold text-indigo-400">${score.toFixed(1)}<span class="text-[8px] ml-0.5">pt</span></div>
-                        <div class="text-[9px] text-gray-500">モーター ${p.motor_2ren}%</div>
+                        <div class="text-[9px] text-gray-500 mt-1">モーター ${p.motor_2ren}%</div>
                     </div>
-                    <div class="col-span-3 px-2">
+                    <div class="col-span-2 px-2 flex flex-col justify-center">
                         <input type="range" class="w-full accent-indigo-500" min="0.5" max="2.0" step="0.1" value="${intuitions[p.teiban]}" 
                                oninput="updateIntuition(${p.teiban}, this.value)">
                     </div>

@@ -247,9 +247,22 @@ def get_today_players(place_no, race_no, date_str):
                 tds = trs[0].find_all('td')
                 if len(tds) >= 8:
                     st_txt = tds[3].text.strip()
-                    p['ST'] = float(st_txt.split()[-1]) if st_txt.split() else 0.15
-                    p['win_rate'] = float(tds[4].text.split()[0]) if tds[4].text.split() else 0.0
-                    p['motor_2ren'] = float(tds[6].text.split()[1]) if len(tds[6].text.split()) > 1 else 0.0
+                    try:
+                        p['ST'] = float(st_txt.split()[-1]) if st_txt.split() and st_txt.split()[-1] != '-' else 0.15
+                    except:
+                        p['ST'] = 0.15
+                        
+                    try:
+                        wr_txt = tds[4].text.split()[0]
+                        p['win_rate'] = float(wr_txt) if wr_txt != '-' else 0.0
+                    except:
+                        p['win_rate'] = 0.0
+                        
+                    try:
+                        m2_txt = tds[6].text.split()[1] if len(tds[6].text.split()) > 1 else '0.0'
+                        p['motor_2ren'] = float(m2_txt) if m2_txt != '-' else 0.0
+                    except:
+                        p['motor_2ren'] = 0.0
             results.append(p)
         return {"players": results, "deadline": deadline} if len(results) == 6 else None
     except Exception as e:

@@ -179,7 +179,7 @@
                             <rect width="500" height="300" fill="#0099e5" />
 
                             <!-- ターンマーク（ブイ画像） -->
-                            <image href="/static/assets/buoy_icon.png" x="215" y="130" width="40" height="40"
+                            <image href="/static/assets/turn_mark.png" x="205" y="105" width="60" height="60"
                                 style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
 
                             <g id="svg-boats"></g>
@@ -193,6 +193,8 @@
     <script>
         let currentData = null;
         let intuitions = { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1 };
+        let hitCombo = null;
+        let hitPrice = null;
 
         function setRace(r) {
             document.getElementById('race_no').value = r;
@@ -217,6 +219,14 @@
             try {
                 const res = await fetch(`/api/predict?place=${place}&race=${race}`);
                 currentData = await res.json();
+
+                hitCombo = null;
+                hitPrice = null;
+                if (currentData.results && currentData.results.rank && currentData.results.rank.length >= 3) {
+                    hitCombo = currentData.results.rank.slice(0, 3).join('-');
+                    hitPrice = currentData.results.dividends["3連単"]?.price || "---";
+                }
+
                 renderUI();
                 drawDiagram();
             } catch (e) {
@@ -425,7 +435,8 @@
             const boatG = document.getElementById('svg-boats');
             if (!boatG || !currentData) return;
             boatG.innerHTML = '';
-            const colors = ["#ffffff", "#2d2d2d", "#ef4444", "#3b82f6", "#facc15", "#22c55e"];
+            // 公式と同じ艇番カラー
+            const colors = ["#ffffff", "#333333", "#ef4444", "#3b82f6", "#facc15", "#22c55e"];
             const textColors = ["#000", "#fff", "#fff", "#fff", "#000", "#fff"];
 
             let allBoats = [1, 2, 3, 4, 5, 6].map(t => {
@@ -441,18 +452,19 @@
                 const rad = angle * Math.PI / 180;
                 const baseX = 230 + Math.cos(rad) * radius;
                 const baseY = 130 + Math.sin(rad) * radius;
-                const boatRotate = angle - 135; // 進行方向を調整
+
+                // 横向き(サイドビュー)の画像なので、回転を控えめにして不自然にならないようにする
+                const displayRotate = (angle + 40) / 3 - 5;
 
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${boatRotate})`);
+                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${displayRotate})`);
 
-                // ボートの背面に艇番色のベースを表示
+                // 公式のスタート展示のように、艇番の四角いタグとボート画像を並べるレイアウト
                 g.innerHTML = `
-                    <ellipse cx="0" cy="0" rx="22" ry="14" fill="${colors[t - 1]}" stroke="rgba(255,255,255,0.3)" stroke-width="1" />
-                    <image href="/static/assets/boat_icon.png" x="-18" y="-18" width="36" height="36" style="filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.5));" />
-                    <text x="0" y="5" fill="${textColors[t - 1]}" font-size="12" font-weight="900" 
-                          text-anchor="middle" transform="rotate(${-boatRotate})" 
-                          style="text-shadow: 0 0 3px rgba(0,0,0,0.5);">${t}</text>
+                    <rect x="-35" y="-12" width="20" height="24" rx="2" fill="${colors[t - 1]}" stroke="${t === 1 ? '#ccc' : colors[t - 1]}" stroke-width="1" style="filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.3));" />
+                    <text x="-25" y="4" fill="${textColors[t - 1]}" font-size="13" font-weight="bold" font-family="sans-serif" text-anchor="middle">${t}</text>
+                    
+                    <image href="/static/assets/boat.png" x="-10" y="-18" width="55" height="36" style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
                 `;
                 boatG.appendChild(g);
             });

@@ -454,18 +454,15 @@
                 const baseX = 230 + Math.cos(rad) * radius;
                 const baseY = 130 + Math.sin(rad) * radius;
 
-                // トップダウンから見たボートの形（進行方向X+）
-                const boatPolygon = "-15,-8 10,-8 20,0 10,8 -15,8";
-
-                // 旋回に合わせてブイを回るような角度
-                const boatRotate = angle + 90;
+                // サイドビューのボートイラストの向きに合わせて回転をある程度抑制する
+                const displayRotate = (angle + 40) / 3 - 5;
 
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${boatRotate})`);
+                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${displayRotate})`);
 
-                // 艇番の四角いタグや文字は描画せず、ボート形状のポリゴンだけを描画
+                // 艇番の四角いタグや文字は描画せず、ボートのイラスト画像のみを描画
                 g.innerHTML = `
-                    <polygon points="${boatPolygon}" fill="${colors[t - 1]}" stroke="#000" stroke-width="1" style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
+                    <image href="/static/assets/boat_icon.png" x="-25" y="-15" width="50" height="30" style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
                 `;
                 boatG.appendChild(g);
             });

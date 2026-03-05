@@ -179,7 +179,8 @@
                             <rect width="500" height="300" fill="#0099e5" />
 
                             <!-- ターンマーク（ブイ画像） -->
-                            <image href="/static/assets/turn_mark.png" x="210" y="130" width="50" height="50" />
+                            <image href="/static/assets/buoy_icon.png" x="215" y="130" width="40" height="40"
+                                style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
 
                             <g id="svg-boats"></g>
                         </svg>
@@ -424,7 +425,8 @@
             const boatG = document.getElementById('svg-boats');
             if (!boatG || !currentData) return;
             boatG.innerHTML = '';
-            const textColors = ["#f8fafc", "#3b82f6", "#ef4444", "#fbbf24", "#f97316", "#10b981"];
+            const colors = ["#ffffff", "#2d2d2d", "#ef4444", "#3b82f6", "#facc15", "#22c55e"];
+            const textColors = ["#000", "#fff", "#fff", "#fff", "#000", "#fff"];
 
             let allBoats = [1, 2, 3, 4, 5, 6].map(t => {
                 const res = currentData.ai_results.find(r => r.teiban == t);
@@ -439,16 +441,18 @@
                 const rad = angle * Math.PI / 180;
                 const baseX = 230 + Math.cos(rad) * radius;
                 const baseY = 130 + Math.sin(rad) * radius;
-                const boatRotate = angle - 135;
+                const boatRotate = angle - 135; // 進行方向を調整
 
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${boatRotate})`);
 
+                // ボートの背面に艇番色のベースを表示
                 g.innerHTML = `
-                    <image href="/static/assets/boat_icon.png" x="-18" y="-18" width="36" height="36" />
-                    <text x="0" y="5" fill="${textColors[t - 1]}" font-size="14" font-weight="900" 
+                    <ellipse cx="0" cy="0" rx="22" ry="14" fill="${colors[t - 1]}" stroke="rgba(255,255,255,0.3)" stroke-width="1" />
+                    <image href="/static/assets/boat_icon.png" x="-18" y="-18" width="36" height="36" style="filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.5));" />
+                    <text x="0" y="5" fill="${textColors[t - 1]}" font-size="12" font-weight="900" 
                           text-anchor="middle" transform="rotate(${-boatRotate})" 
-                          style="text-shadow: 0 0 4px rgba(0,0,0,0.8);">${t}</text>
+                          style="text-shadow: 0 0 3px rgba(0,0,0,0.5);">${t}</text>
                 `;
                 boatG.appendChild(g);
             });

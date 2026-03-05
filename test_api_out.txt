@@ -1,0 +1,4 @@
+--- /request/request_chokuzen_data.php --- Status: 404
+--- /request/request_tenji_honban_start.php --- Status: 200
+
+--- /request/request_race_shusso.php --- Status: 404

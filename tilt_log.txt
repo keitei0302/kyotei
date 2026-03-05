@@ -1,0 +1,56 @@
+{
+  "1": {
+    "show_time": 6.88,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.15,
+    "turn_time": 11.44,
+    "straight_time": 0.0,
+    "parts_exchange": "“íŒ´@@ãÄ‘¾ 53.2kg 6.88 -0.5 R 6 i“ü 6 0.0 ST .16 ’…‡ ‚U"
+  },
+  "2": {
+    "show_time": 6.87,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.36,
+    "turn_time": 11.55,
+    "straight_time": 0.0,
+    "parts_exchange": "“¡“c@@_l 52.0kg 6.87 -0.5 R 2 i“ü 1 0.0 ST .26 ’…‡ ‚P"
+  },
+  "3": {
+    "show_time": 6.87,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.21,
+    "turn_time": 11.6,
+    "straight_time": 0.0,
+    "parts_exchange": "“nç²@@—T‹M 52.0kg 6.87 -0.5 R 5 i“ü 3 0.0 ST .23 ’…‡ ‚T"
+  },
+  "4": {
+    "show_time": 6.86,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.38,
+    "turn_time": 11.71,
+    "straight_time": 0.0,
+    "parts_exchange": "X’è@@Wj 52.2kg 6.86 -0.5 R 6 i“ü 1 0.0 ST .09 ’…‡ ‚T"
+  },
+  "5": {
+    "show_time": 6.9,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.46,
+    "turn_time": 11.67,
+    "straight_time": 0.0,
+    "parts_exchange": "ìè@@½u 52.0kg 6.90 -0.5 R 5 i“ü 2 0.0 ST .24 ’…‡ ‚R"
+  },
+  "6": {
+    "show_time": 6.9,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.51,
+    "turn_time": 11.64,
+    "straight_time": 0.0,
+    "parts_exchange": "²“¡@Œªj˜N 54.3kg 6.90 -0.5 R 2 i“ü 2 0.0 ST .24 ’…‡ ‚T"
+  }
+}

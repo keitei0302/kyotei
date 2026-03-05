@@ -1,0 +1,56 @@
+{
+  "1": {
+    "show_time": 6.88,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.15,
+    "turn_time": 11.44,
+    "straight_time": 0.0,
+    "parts_exchange": "\u6960\u539f\u3000\u3000\u7fd4\u592a 53.2kg 6.88 -0.5 R 6 \u9032\u5165 6 0.0 ST .16 \u7740\u9806 \uff16"
+  },
+  "2": {
+    "show_time": 6.87,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.36,
+    "turn_time": 11.55,
+    "straight_time": 0.0,
+    "parts_exchange": "\u85e4\u7530\u3000\u3000\u6d69\u4eba 52.0kg 6.87 -0.5 R 2 \u9032\u5165 1 0.0 ST .26 \u7740\u9806 \uff11"
+  },
+  "3": {
+    "show_time": 6.87,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.21,
+    "turn_time": 11.6,
+    "straight_time": 0.0,
+    "parts_exchange": "\u6e21\u908a\u3000\u3000\u88d5\u8cb4 52.0kg 6.87 -0.5 R 5 \u9032\u5165 3 0.0 ST .23 \u7740\u9806 \uff15"
+  },
+  "4": {
+    "show_time": 6.86,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.38,
+    "turn_time": 11.71,
+    "straight_time": 0.0,
+    "parts_exchange": "\u68ee\u5b9a\u3000\u3000\u6643\u53f2 52.2kg 6.86 -0.5 R 6 \u9032\u5165 1 0.0 ST .09 \u7740\u9806 \uff15"
+  },
+  "5": {
+    "show_time": 6.9,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.46,
+    "turn_time": 11.67,
+    "straight_time": 0.0,
+    "parts_exchange": "\u5ddd\u5d0e\u3000\u3000\u8aa0\u5fd7 52.0kg 6.90 -0.5 R 5 \u9032\u5165 2 0.0 ST .24 \u7740\u9806 \uff13"
+  },
+  "6": {
+    "show_time": 6.9,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.51,
+    "turn_time": 11.64,
+    "straight_time": 0.0,
+    "parts_exchange": "\u4f50\u85e4\u3000\u8b19\u53f2\u6717 54.3kg 6.90 -0.5 R 2 \u9032\u5165 2 0.0 ST .24 \u7740\u9806 \uff15"
+  }
+}

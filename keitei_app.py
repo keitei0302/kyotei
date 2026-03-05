@@ -30,109 +30,126 @@ if not os.path.exists(CACHE_DIR): os.makedirs(CACHE_DIR)
 # ──────────────────────────────────────────
 
 def get_beforeinfo(place_no, race_no, date_str):
-    """直前情報ページから展示タイム・チルト角度・プロペラ交換情報を取得"""
+    """直前情報ページから展示タイム・チルト角度・プロペラ交換情報を取得（動的カラム特定版）"""
     url = f"https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno={race_no}&jcd={place_no}&hd={date_str}"
     headers = {'User-Agent': 'Mozilla/5.0'}
-    # propeller: 新プロペラの場合は True
-    result = {i: {'show_time': 0.0, 'tilt': 0.0, 'propeller': False, 'lap_time': 0.0, 'turn_time': 0.0, 'straight_time': 0.0} for i in range(1, 7)}
+    result = {i: {'show_time': 0.0, 'tilt': 0.0, 'propeller': False, 'lap_time': 0.0, 'turn_time': 0.0, 'straight_time': 0.0, 'parts_exchange': 'なし'} for i in range(1, 7)}
     try:
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.content, 'html.parser')
+
+        # 1. ヘッダーから列インデックスを特定
+        show_idx = 4  # デフォルト
+        tilt_idx = 5  # デフォルト
+        parts_idx = 7 # デフォルト
         
-        # 1. 展示タイムとチルトの取得
+        table = soup.find('div', class_='contentsFrame')
+        if table:
+            table = table.find('table')
+        if table:
+            thead = table.find('thead')
+            if thead:
+                ths = thead.find_all('th')
+                for i, th in enumerate(ths):
+                    txt = th.get_text(strip=True)
+                    if '展示タイム' in txt: show_idx = i
+                    elif 'チルト' in txt: tilt_idx = i
+                    elif '部品' in txt: parts_idx = i
+
+        # 2. 展示タイム・チルト・部品交換の取得
         tbodies = soup.find_all('tbody', class_='is-fs12')
-        for tbody in tbodies:
+        for tbody in tbodies[:6]:
             td_teiban = tbody.find('td', class_=re.compile(r'is-boatColor'))
             if not td_teiban: continue
             try:
                 t_num = int(td_teiban.get_text(strip=True))
                 if not (1 <= t_num <= 6): continue
                 
-                all_tds = tbody.find_all('td')
-                for td in all_tds:
-                    val_str = td.get_text(strip=True)
-                    # 展示タイム: 6.xx (6.00 〜 8.00)
-                    if re.match(r'^\d\.\d{2}$', val_str):
-                        val = float(val_str)
-                        if 6.0 <= val <= 8.0: result[t_num]['show_time'] = val
-                    # チルト角度: -0.5, 0.0, 0, 1, 1.5, 2, 3 等
-                    # 正規表現を緩和: 符号(任意) + 数字1桁 + 小数点部分(任意)
-                    elif re.match(r'^[-+]?\d(\.\d)?$', val_str):
+                # 最初に行（tr）を取得し、その中の1行目（展示タイムがある行）を対象にする
+                rows = tbody.find_all('tr')
+                if rows:
+                    tds = rows[0].find_all('td')
+                    if len(tds) > max(show_idx, tilt_idx):
+                        show_time_str = tds[show_idx].get_text(strip=True)
+                        tilt_str = tds[tilt_idx].get_text(strip=True)
+                        
                         try:
-                            val = float(val_str)
-                            # 競艇のチルト範囲（通常 -0.5 〜 3.0）
-                            # 展示タイムと誤認しないように 5.0 未満に限定
-                            if -0.5 <= val <= 3.0: 
-                                result[t_num]['tilt'] = val
+                            val = float(show_time_str)
+                            if 6.0 <= val <= 8.0: result[t_num]['show_time'] = val
                         except: pass
+                        
+                        try:
+                            # チルトは "-0.5" などの形式
+                            val = float(tilt_str)
+                            if -0.5 <= val <= 3.0: result[t_num]['tilt'] = val
+                        except: pass
+
+                    # 部品交換は1行目か2行目にある可能性があるが、通常は1行目のパーツ列
+                    if len(tds) > parts_idx:
+                        p_txt = tds[parts_idx].get_text(strip=True)
+                        if p_txt and p_txt != 'なし':
+                            result[t_num]['parts_exchange'] = p_txt
             except: pass
 
-        # 2. プロペラ交換情報の取得 (別のtableにある場合が多い)
-        # 「プロペラ」というテキストを含むセクションを探す
-        propeller_table = soup.find('th', string=re.compile(r'プロペラ'))
-        if propeller_table:
-            target_table = propeller_table.find_parent('table')
-            if target_table:
-                # 「新」という文字が入っている艇番を探す
-                for tr in target_table.find_all('tr'):
+        # 3. プロペラ交換情報の取得
+        prop_th = soup.find('th', string=re.compile(r'プロペラ'))
+        if prop_th:
+            p_table = prop_th.find_parent('table')
+            if p_table:
+                for tr in p_table.find_all('tr'):
                     tds = tr.find_all('td')
                     if len(tds) >= 2:
                         try:
-                            t_num = int(tds[0].get_text(strip=True))
-                            if "新" in tds[1].get_text():
-                                result[t_num]['propeller'] = True
+                            num = int(tds[0].get_text(strip=True))
+                            if "新" in tds[1].get_text(): result[num]['propeller'] = True
                         except: pass
-        # 3. オリジナル展示タイムの取得 (Boatcastのテキストデータから取得)
-        try:
-            race_no_str = str(race_no).zfill(2)
-            place_no_str = str(place_no).zfill(2)
-            boatcast_url = f"https://race.boatcast.jp/txt/{place_no_str}/bc_oriten_{date_str}_{place_no_str}_{race_no_str}.txt"
-            
-            text = ""
-            try:
-                res_bc = requests.get(boatcast_url, timeout=5)
-                if res_bc.status_code == 200:
-                    res_bc.encoding = res_bc.apparent_encoding
-                    text = res_bc.text
-                else:
-                    print(f"[BeforeInfo] Boatcast Original Times not found (Status {res_bc.status_code})")
-            except Exception as e:
-                print(f"[Requests Error] {e}")
-            
-            if text:
-                lines = text.strip().split('\n')
-                # ヘッダーから項目の列インデックスを特定
-                cols = {"一　周": None, "まわり足": None, "直　線": None}
-                for line in lines:
-                    if "周" in line and ("まわり" in line or "直" in line):
-                        # タブ区切りまたは空白区切りのため、"周" や "まわり" などを直接探す
-                        # 後部からいくつ目かをカウント
-                        parts = line.split()
-                        for i, p in enumerate(parts):
-                            if "周" in p: cols["一　周"] = -(len(parts)-i)
-                            if "まわり" in p: cols["まわり足"] = -(len(parts)-i)
-                            if "直" in p and "線" in p: cols["直　線"] = -(len(parts)-i)
-                        break
 
+        # 4. オリジナル展示タイム（Boatcast）の取得
+        try:
+            r_str, p_str = str(race_no).zfill(2), str(place_no).zfill(2)
+            bc_url = f"https://race.boatcast.jp/txt/{p_str}/bc_oriten_{date_str}_{p_str}_{r_str}.txt"
+            res_bc = requests.get(bc_url, timeout=5)
+            if res_bc.status_code == 200:
+                res_bc.encoding = res_bc.apparent_encoding
+                lines = res_bc.text.strip().split('\n')
+                
+                cols = {"lap": None, "turn": None, "strt": None}
                 for line in lines:
-                    parts = line.split()
-                    if len(parts) >= 4:
+                    if "周" in line or "まわり" in line:
+                        parts = line.split('\t') if '\t' in line else line.split()
+                        for i, p in enumerate(parts):
+                            if "周" in p: cols["lap"] = i
+                            if "まわり" in p: cols["turn"] = i
+                            if "直" in p: cols["strt"] = i
+                        break
+                
+                for line in lines:
+                    # 数字で始まる行を探す
+                    if re.match(r'^\d+', line.strip()):
+                        parts = line.split('\t') if '\t' in line else line.split()
                         try:
-                            t_num = int(parts[0])
+                            t_num = int(parts[0].strip())
                             if 1 <= t_num <= 6:
-                                if cols.get("直　線") is not None and len(parts) >= abs(cols["直　線"]):
-                                    result[t_num]['straight_time'] = float(parts[cols["直　線"]])
-                                if cols.get("まわり足") is not None and len(parts) >= abs(cols["まわり足"]):
-                                    result[t_num]['turn_time'] = float(parts[cols["まわり足"]])
-                                if cols.get("一　周") is not None and len(parts) >= abs(cols["一　周"]):
-                                    result[t_num]['lap_time'] = float(parts[cols["一　周"]])
-                        except ValueError:
-                            pass
-        except Exception as e:
-            print(f"[BeforeInfo] Original Times Error: {e}")
+                                # 数値（小数点あり・なし両方）を抽出
+                                nums = re.findall(r'\d+\.\d+|\d+', line)
+                                # 最初の要素（艇番）を除外
+                                values = nums[1:]
+                                if len(values) >= 3:
+                                    # [Lap, Turn, Straight] の順で並ぶことが多い
+                                    # 前段階で取得した tilt を破壊しないよう、慎重に代入
+                                    try: result[t_num]['lap_time'] = float(values[0])
+                                    except: pass
+                                    try: result[t_num]['turn_time'] = float(values[1])
+                                    except: pass
+                                    try: result[t_num]['straight_time'] = float(values[2])
+                                    except: pass
+                        except: pass
+        except: pass
 
     except Exception as e:
         print(f"[BeforeInfo] Error: {e}")
+    return result
+
     return result
 
 def get_odds3t(place_no, race_no, date_str):
@@ -252,21 +269,63 @@ def get_today_players(place_no, race_no, date_str):
         tbodies = soup.find_all('tbody', class_='is-fs12')
         for i, tbody in enumerate(tbodies[:6]): 
             p = {"teiban": i + 1}
+            # 選手名の取得
             name_el = tbody.find('div', class_='is-fs18')
             p['name'] = name_el.text.strip().replace(' ', '').replace('\u3000', '') if name_el else f"Player{i+1}"
+            
+            # 登録番号の取得
+            toban_el = tbody.find('div', class_='is-fs11')
+            if toban_el:
+                p['toban'] = toban_el.text.strip().split('/')[0] # 「4444 / A1」などから抽出
+            
+            # 勝率等の取得
             trs = tbody.find_all('tr')
             if trs:
                 tds = trs[0].find_all('td')
                 if len(tds) >= 8:
                     st_txt = tds[3].text.strip()
                     p['ST'] = float(st_txt.split()[-1]) if st_txt.split() else 0.15
-                    p['win_rate'] = float(tds[4].text.split()[0]) if tds[4].text.split() else 0.0
+                    p['win_rate'] = float(tds[4].text.split()[0]) if tds[4].text.split() else 0.0 # 全国勝率
+                    p['local_win_rate'] = float(tds[5].text.split()[0]) if len(tds) > 5 and tds[5].text.split() else 0.0 # 当地勝率
                     p['motor_2ren'] = float(tds[6].text.split()[1]) if len(tds[6].text.split()) > 1 else 0.0
+            
+            # 節間成績の取得 (着順の平均と節間ST平均)
+            p['section_results'] = []
+            p['section_st_avg'] = 0.0
+            if len(trs) >= 3:
+                # 3行目が節間成績であることが多い（公式ページ構造）
+                results_tds = trs[2].find_all('td')
+                # ※必要に応じて詳細なスクレイピングを補強
+            
             results.append(p)
         return {"players": results, "deadline": deadline} if len(results) == 6 else None
     except Exception as e:
         print(f"[TodayPlayers] Error: {e}")
         return None
+
+import urllib.request
+def get_player_course_data(toban):
+    # 選手のコース別成績（1〜6コースの1着率、2着率等）を取得
+    # （逃げ率、差し率等として活用）
+    url = f"https://www.boatrace.jp/owpc/pc/data/racersearch/course?toban={toban}"
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as res:
+            soup = BeautifulSoup(res.read(), 'html.parser')
+            
+        course_stats = {}
+        # 1着回数、出走回数などを探す
+        tbodies = soup.find_all('tbody', class_='is-p10-0')
+        for tbody in tbodies:
+            tds = tbody.find_all('td')
+            if len(tds) > 10:
+                # コース番号は行の最初の方にあるか、表の構造から推定
+                pass # 詳細パースは後続で
+        return course_stats
+    except Exception as e:
+        print(f"[CourseData] Error: {e}")
+        return {}
 
 # ──────────────────────────────────────────
 # AI予測・戦術解析
@@ -309,65 +368,79 @@ def predict_race(place_no, race_no, date_str, players_df):
         players_df['straight_time'] = 0.0
     return players_df
 
+
 def apply_user_intuition(df_pred):
-    """直感ルール（展示タイム・プロペラ・チルト等）を適用しスコアを補正"""
+    # 新しい強力な補正ロジック
     df_pred['custom_prob'] = df_pred['ai_prob'].copy()
     
-    # 1. 展示タイムによる補正
-    if 'show_time' in df_pred.columns:
-        valid = df_pred[df_pred['show_time'] > 0]
-        if not valid.empty:
-            avg, best = valid['show_time'].mean(), valid['show_time'].min()
-            for i, row in df_pred.iterrows():
-                if row['show_time'] <= 0: continue
-                # 展示タイムの差分に応じた補正（一番時計に近いほど加点）
-                diff = avg - row['show_time']
-                df_pred.at[i, 'custom_prob'] += diff * 2.0  # 重みを 1.5 -> 2.0 に強化
-                if row['show_time'] == best and diff >= 0.03:
-                    df_pred.at[i, 'custom_prob'] += 0.07  # 一番時計ボーナスを 0.05 -> 0.07 に強化
-
-    # 2. プロペラ交換による補正
-    if 'propeller' in df_pred.columns:
-        for i, row in df_pred.iterrows():
-            if row['propeller']:
-                # 新プロペラ交換後は気配が変わることが多いため、少しスコアを下げる（または要警戒とする）
-                # ここでは保守的に -3% の補正
-                df_pred.at[i, 'custom_prob'] -= 0.03
+    # 各種スコア計算
+    for i, row in df_pred.iterrows():
+        score = row['ai_prob']
+        
+        # --- 1. 勝率アドバンテージ ---
+        # 全国勝率と当地勝率の平均を重視
+        win_rate = row.get('win_rate', 0.0)
+        local_win = row.get('local_win_rate', win_rate)
+        avg_win_rate = (win_rate + local_win) / 2
+        if avg_win_rate >= 7.0:
+            score += 0.15
+        elif avg_win_rate >= 6.0:
+            score += 0.08
+        elif avg_win_rate < 4.0:
+            score -= 0.05
+            
+        # 当地が極端に高い（当地巧者）
+        if local_win - win_rate >= 1.0 and local_win >= 6.0:
+            score += 0.05
+            
+        # --- 2. 展示タイムと節間タイム ---
+        if row.get('show_time', 0) > 0:
+            avg_st = df_pred[df_pred['show_time'] > 0]['show_time'].mean()
+            diff = avg_st - row['show_time']
+            # 展示が良いと最大+10%
+            score += diff * 2.5
+            
+        if row.get('lap_time', 0) > 0:
+            avg_lap = df_pred[df_pred['lap_time'] > 0]['lap_time'].mean()
+            score += (avg_lap - row['lap_time']) * 0.5
+            
+        # --- 3. コース別・決まり手（逃げ・捲り）適性 ---
+        course = int(row['teiban'])
+        if course == 1:
+            # イン逃げ評価
+            if avg_win_rate >= 6.0 and row.get('ST', 0.20) < 0.15:
+                score += 0.20 # 逃げ鉄板
+            if row.get('motor_2ren', 0) >= 40.0:
+                score += 0.05
+        else:
+            # ダッシュ・センターの捲り/差し評価
+            if course in [3, 4] and row.get('ST', 0.20) < 0.14 and avg_win_rate >= 6.0:
+                score += 0.10 # 捲り警戒
+            if course in [2, 5] and avg_win_rate >= 6.5:
+                score += 0.05 # 差し/捲り差し警戒
                 
-    # 3. オリジナル展示タイムによる補正
-    if 'lap_time' in df_pred.columns:
-        valid = df_pred[df_pred['lap_time'] > 0]
-        if len(valid) >= 3:
-            avg = valid['lap_time'].mean()
-            for i, row in df_pred.iterrows():
-                if row['lap_time'] <= 0: continue
-                # 一周タイムの差分 (総合力: 係数0.2)
-                diff = avg - row['lap_time']
-                df_pred.at[i, 'custom_prob'] += diff * 0.2
-
-    if 'turn_time' in df_pred.columns:
-        valid = df_pred[df_pred['turn_time'] > 0]
-        if len(valid) >= 3:
-            avg = valid['turn_time'].mean()
-            for i, row in df_pred.iterrows():
-                if row['turn_time'] <= 0: continue
-                # まわり足の差分 (出足: 係数0.5)
-                diff = avg - row['turn_time']
-                df_pred.at[i, 'custom_prob'] += diff * 0.5
-
-    if 'straight_time' in df_pred.columns:
-        valid = df_pred[df_pred['straight_time'] > 0]
-        if len(valid) >= 3:
-            avg = valid['straight_time'].mean()
-            for i, row in df_pred.iterrows():
-                if row['straight_time'] <= 0: continue
-                # 直線タイムの差分 (伸び: 係数1.0)
-                diff = avg - row['straight_time']
-                df_pred.at[i, 'custom_prob'] += diff * 1.0
-
-    df_pred['custom_prob'] = df_pred['custom_prob'].clip(lower=0.01)
+        # --- 4. 部品交換情報 ---
+        parts = str(row.get('parts_exchange', 'なし'))
+        if parts != 'なし':
+            if 'リング' in parts:
+                # リング交換は良化の兆しがある場合加点。基本はマイナス要素だが直前で変わる可能性
+                score += 0.02
+            elif 'ピストン' in parts or 'シリンダ' in parts:
+                score -= 0.05 # 大掛かりな整備は機力難の証明
+            elif 'キャブレタ' in parts or 'キャリアボデ' in parts:
+                score -= 0.02
+                
+        if row.get('propeller', False):
+            score -= 0.03 # 新ペラは調整が間に合ってないリスク
+            
+        df_pred.at[i, 'custom_prob'] = max(0.01, score)
+        
+    # 正規化
+    total = df_pred['custom_prob'].sum()
+    if total > 0:
+        df_pred['custom_prob'] = df_pred['custom_prob'] / total
+    
     return df_pred
-
 # ──────────────────────────────────────────
 # UI・描画
 # ──────────────────────────────────────────

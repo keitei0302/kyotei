@@ -1,0 +1,69 @@
+#menu1").attr("href", "/race_ichiran.php?place_no=
+#menu3").attr("href", "/race_shusso.php?place_no=
+#menu4").attr("href", "/race_shusso.php?place_no=
+','','race_shusso.php?place_no=
+/api/live_data.php
+/chotenkai.php?
+/manual/oriten_img_contents.php
+/race_shusso.php?place_no=
+/request/request_chiruto_shoritsu.php
+/request/request_chotenkai.php
+/request/request_commtent_ichiran.php
+/request/request_data_matome.php
+/request/request_deme_kaiseki.php
+/request/request_display_ranking.php
+/request/request_get_user_memo.php
+/request/request_kitaichi_kaiseki.php
+/request/request_make_shingainen.php
+/request/request_ninki_kaiseki.php
+/request/request_odds_custom.php
+/request/request_player_info.php
+/request/request_player_info_custom.php
+/request/request_player_info_only.php
+/request/request_race_okiniiri.php
+/request/request_shingainen_info.php
+/request/request_shokin_data.php
+/request/request_st_img_data.php
+/request/request_st_saihinchi.php
+/request/request_tatei_kankei.php
+/request/request_tatei_nigashi.php
+/request/request_tenji_honban_start.php
+/request/request_tenji_honban_start_zure.php
+/request/request_tenji_ichiran.php
+/request/request_time_rireki.php
+/request/request_yusho_data.php
+/request_motor_kako_setsu.php
+/request_user_okiniiri.php
+/tools/request_tools.php
+0' + m_Place_no).slice(-2) + '&m=1"';//'http://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=
+<a style ="text-decoration:underline;color:blue;" href="/race_shusso.php?place_no=
+<br>詳しくは<a href="https://member.boatracebiyori.com/membership.php" target="_blank" style="color:blue;text-decoration:underline;">こちら</a>をご覧ください。</a></p>
+<div class="my2"><b>MyDataのご利用にはログインが必要です。ログイン後に「User」→「MyData」で表示したいデータを選択して下さい</b><br><a href="/user/login.php" class="common_btn">ログインへ</a></div>
+<iframe src="https://smart.jlc.ne.jp/tbsp/streamer/streamer.php?jo=
+<p style="margin:4px 0px;"><a target="_blank" href="/race_shusso.php?place_no=
+<p><a href="https://member.boatracebiyori.com/membership.php" target="_blank" style="color:blue;text-decoration:underline;">メンバーシップについて</a></a></p>
+https://livebb.jlc.ne.jp/bb_top/new_bb/streamer/streamer.php?md=T&jo=
+https://member.boatracebiyori.com/membership.php
+https://smart.jlc.ne.jp/tbsp/streamer/streamer.php?jo=
+https://smart.jlc.ne.jp/tbsp/streamer/streamer.php?jo=' + ('0' + m_Place_no).slice(-2) + '&m=1
+margin:4px 0px;"><a target="_blank" href="/race_shusso.php?place_no=' + m_Place_no + '&race_no=' + hayamiSplit[0] + '&hiduke=' + m_Hiduke + '&slider=1
+margin:4px 0px;"><a target="_blank" href="/race_shusso.php?place_no=' + m_Place_no + '&race_no=' + hayami_race_no + '&hiduke=' + m_Hiduke + '&slider=1
+my2"><b>MyDataのご利用にはログインが必要です。ログイン後に「User」→「MyData」で表示したいデータを選択して下さい</b><br><a href="/user/login.php
+request/request_player_kako10.php
+request/request_today_suimen.php
+request_chokuzen_info_v2.php
+request_deme_rank.php
+request_kako_race_junban.php
+request_konsetsu_all.php
+request_konsetsu_course_kaiseki.php
+request_odds_shousai.php
+request_place_seiseki.php
+request_place_shouritsu.php
+request_player_course_result_konki.php
+request_race_shusso_detail_v4.php
+request_setsubetsu_kaiseki.php
+request_start_junban.php
+request_uriage_shousai.php
+request_user_custom_data.php
+request_user_custom_data_all.php
+text-decoration:underline;color:blue;" href="/race_shusso.php?place_no=' + value.place_no + '&race_no=' + value.race_no + '&hiduke=' + value.hiduke + '&slider=7' + '

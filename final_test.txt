@@ -1,0 +1,56 @@
+{
+  "1": {
+    "show_time": 6.88,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.15,
+    "turn_time": 11.44,
+    "straight_time": 0.0,
+    "parts_exchange": "‚È‚µ"
+  },
+  "2": {
+    "show_time": 6.87,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.36,
+    "turn_time": 11.55,
+    "straight_time": 0.0,
+    "parts_exchange": "‚È‚µ"
+  },
+  "3": {
+    "show_time": 6.87,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.21,
+    "turn_time": 11.6,
+    "straight_time": 0.0,
+    "parts_exchange": "‚È‚µ"
+  },
+  "4": {
+    "show_time": 6.86,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.38,
+    "turn_time": 11.71,
+    "straight_time": 0.0,
+    "parts_exchange": "‚È‚µ"
+  },
+  "5": {
+    "show_time": 6.9,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.46,
+    "turn_time": 11.67,
+    "straight_time": 0.0,
+    "parts_exchange": "‚È‚µ"
+  },
+  "6": {
+    "show_time": 6.9,
+    "tilt": -0.5,
+    "propeller": false,
+    "lap_time": 37.51,
+    "turn_time": 11.64,
+    "straight_time": 0.0,
+    "parts_exchange": "‚È‚µ"
+  }
+}

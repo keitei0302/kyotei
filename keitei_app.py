@@ -90,31 +90,42 @@ def get_beforeinfo(place_no, race_no, date_str):
             
             text = ""
             try:
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=True)
-                    page = browser.new_page()
-                    res_bc = page.goto(boatcast_url, timeout=10000)
-                    if res_bc and res_bc.ok:
-                        text = page.evaluate("() => document.body.innerText")
-                    else:
-                        status = res_bc.status if res_bc else "Timeout"
-                        print(f"[BeforeInfo] Boatcast Original Times not found (Status {status})")
-                    browser.close()
+                res_bc = requests.get(boatcast_url, timeout=5)
+                if res_bc.status_code == 200:
+                    res_bc.encoding = res_bc.apparent_encoding
+                    text = res_bc.text
+                else:
+                    print(f"[BeforeInfo] Boatcast Original Times not found (Status {res_bc.status_code})")
             except Exception as e:
-                print(f"[Playwright Error] {e}")
+                print(f"[Requests Error] {e}")
             
             if text:
                 lines = text.strip().split('\n')
+                # ヘッダーから項目の列インデックスを特定
+                cols = {"一　周": None, "まわり足": None, "直　線": None}
+                for line in lines:
+                    if "周" in line and ("まわり" in line or "直" in line):
+                        # タブ区切りまたは空白区切りのため、"周" や "まわり" などを直接探す
+                        # 後部からいくつ目かをカウント
+                        parts = line.split()
+                        for i, p in enumerate(parts):
+                            if "周" in p: cols["一　周"] = -(len(parts)-i)
+                            if "まわり" in p: cols["まわり足"] = -(len(parts)-i)
+                            if "直" in p and "線" in p: cols["直　線"] = -(len(parts)-i)
+                        break
+
                 for line in lines:
                     parts = line.split()
                     if len(parts) >= 4:
                         try:
-                            # フォーマット: 1  岩瀬  裕亮  36.30  6.03  6.43
                             t_num = int(parts[0])
                             if 1 <= t_num <= 6:
-                                result[t_num]['straight_time'] = float(parts[-1])
-                                result[t_num]['turn_time'] = float(parts[-2])
-                                result[t_num]['lap_time'] = float(parts[-3])
+                                if cols.get("直　線") is not None and len(parts) >= abs(cols["直　線"]):
+                                    result[t_num]['straight_time'] = float(parts[cols["直　線"]])
+                                if cols.get("まわり足") is not None and len(parts) >= abs(cols["まわり足"]):
+                                    result[t_num]['turn_time'] = float(parts[cols["まわり足"]])
+                                if cols.get("一　周") is not None and len(parts) >= abs(cols["一　周"]):
+                                    result[t_num]['lap_time'] = float(parts[cols["一　周"]])
                         except ValueError:
                             pass
         except Exception as e:
@@ -169,7 +180,8 @@ def get_race_result(place_no, race_no, date_str):
     headers = {'User-Agent': 'Mozilla/5.0'}
     result = {"rank": [], "dividends": {}}
     try:
-        res = requests.get(url, headers=headers, timeout=10)
+        res = requests.get(url, headers=headers, timeout=30)
+        res.encoding = res.apparent_encoding
         soup = BeautifulSoup(res.content, 'html.parser')
         full_text = soup.get_text(separator=' ')
 
@@ -247,22 +259,9 @@ def get_today_players(place_no, race_no, date_str):
                 tds = trs[0].find_all('td')
                 if len(tds) >= 8:
                     st_txt = tds[3].text.strip()
-                    try:
-                        p['ST'] = float(st_txt.split()[-1]) if st_txt.split() and st_txt.split()[-1] != '-' else 0.15
-                    except:
-                        p['ST'] = 0.15
-                        
-                    try:
-                        wr_txt = tds[4].text.split()[0]
-                        p['win_rate'] = float(wr_txt) if wr_txt != '-' else 0.0
-                    except:
-                        p['win_rate'] = 0.0
-                        
-                    try:
-                        m2_txt = tds[6].text.split()[1] if len(tds[6].text.split()) > 1 else '0.0'
-                        p['motor_2ren'] = float(m2_txt) if m2_txt != '-' else 0.0
-                    except:
-                        p['motor_2ren'] = 0.0
+                    p['ST'] = float(st_txt.split()[-1]) if st_txt.split() else 0.15
+                    p['win_rate'] = float(tds[4].text.split()[0]) if tds[4].text.split() else 0.0
+                    p['motor_2ren'] = float(tds[6].text.split()[1]) if len(tds[6].text.split()) > 1 else 0.0
             results.append(p)
         return {"players": results, "deadline": deadline} if len(results) == 6 else None
     except Exception as e:

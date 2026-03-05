@@ -179,8 +179,8 @@
                             <rect width="500" height="300" fill="#0099e5" />
 
                             <!-- ターンマーク（三角ブイ） -->
-                            <image href="/static/assets/buoy_icon.png" x="205" y="105" width="60" height="60"
-                                style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
+                            <image href="/static/assets/buoy_icon.png" x="220" y="80" width="60" height="60"
+                                style="filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.5));" />
 
                             <g id="svg-boats"></g>
                         </svg>
@@ -435,6 +435,7 @@
             const boatG = document.getElementById('svg-boats');
             if (!boatG || !currentData) return;
             boatG.innerHTML = '';
+
             // 公式と同じ艇番カラー
             const colors = ["#ffffff", "#333333", "#ef4444", "#3b82f6", "#facc15", "#22c55e"];
             const textColors = ["#000", "#fff", "#fff", "#fff", "#000", "#fff"];
@@ -453,22 +454,27 @@
                 const baseX = 230 + Math.cos(rad) * radius;
                 const baseY = 130 + Math.sin(rad) * radius;
 
-                // ボートのイラストを使用し、文字なしで表示
-                // サイドビューの画像のため、激しく回転させないよう角度を制限・調整する
-                const displayRotate = (angle + 40) / 3 - 5;
+                // トップダウンから見たボートの形（進行方向X+）
+                const boatPolygon = "-15,-8 10,-8 20,0 10,8 -15,8";
+
+                // 旋回に合わせてブイを回るような角度
+                const boatRotate = angle + 90;
 
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${displayRotate})`);
+                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${boatRotate})`);
 
-                // 数字の四角タグなどは描画せず、ボートのイラストのみを描画
-                // xを画像の中心になるよう微調整 (-27)
+                // 艇番の四角いタグや文字は描画せず、ボート形状のポリゴンだけを描画
                 g.innerHTML = `
-                    <image href="/static/assets/boat.png" x="-27" y="-18" width="55" height="36" style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
+                    <polygon points="${boatPolygon}" fill="${colors[t - 1]}" stroke="#000" stroke-width="1" style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
                 `;
                 boatG.appendChild(g);
             });
         }
     </script>
+</body>
+
+</html>
+</script>
 </body>
 
 </html>

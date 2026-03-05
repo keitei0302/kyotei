@@ -453,20 +453,17 @@
                 const baseX = 230 + Math.cos(rad) * radius;
                 const baseY = 130 + Math.sin(rad) * radius;
 
-                // ポリゴンの頂点（トップダウンから見たボートの形）
-                // 進行方向（X+方向へ尖らせる）
-                const boatPolygon = "-15,-8 10,-8 20,0 10,8 -15,8";
-
-                // 旋回レイアウトに合わせた回転を設定（艇がブイを回る弧を描くような角度）
-                // 角度調整：元はサイドビュー用だったので回転を変更。進行方向は angle + 90 度付近
-                const boatRotate = angle + 90;
+                // ボートのイラストを使用し、文字なしで表示
+                // サイドビューの画像のため、激しく回転させないよう角度を制限・調整する
+                const displayRotate = (angle + 40) / 3 - 5;
 
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${boatRotate})`);
+                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${displayRotate})`);
 
-                // 艇番の四角いタグや文字は描画せず、ボート形状のポリゴンだけを描画する
+                // 数字の四角タグなどは描画せず、ボートのイラストのみを描画
+                // xを画像の中心になるよう微調整 (-27)
                 g.innerHTML = `
-                    <polygon points="${boatPolygon}" fill="${colors[t - 1]}" stroke="#000" stroke-width="1" style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
+                    <image href="/static/assets/boat.png" x="-27" y="-18" width="55" height="36" style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.4));" />
                 `;
                 boatG.appendChild(g);
             });

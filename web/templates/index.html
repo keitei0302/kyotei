@@ -178,9 +178,21 @@
                             <!-- 水面（背景） -->
                             <rect width="500" height="300" fill="#0099e5" />
 
-                            <!-- ターンマーク（三角ブイ） -->
-                            <image href="/static/assets/buoy_icon.png" x="220" y="80" width="60" height="60"
-                                style="filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.5));" />
+                            <!-- ターンマーク（SVGで描画・背景透過） -->
+                            <g id="turn-mark" transform="translate(250, 110)">
+                                <!-- ブイの影 -->
+                                <polygon points="-15,20 15,20 0,-20" fill="rgba(0,0,0,0.3)" transform="translate(2,4)"
+                                    style="filter: blur(2px);" />
+                                <!-- ブイ本体（白ベース） -->
+                                <polygon points="-15,20 15,20 0,-20" fill="#ffffff" stroke="#333" stroke-width="1.5" />
+                                <!-- 赤い帯（上部） -->
+                                <polygon points="-6,-4 6,-4 9,4 -9,4" fill="#ef4444" stroke="#333" stroke-width="1" />
+                                <!-- 赤い帯（下部） -->
+                                <polygon points="-12,12 12,12 15,20 -15,20" fill="#ef4444" stroke="#333"
+                                    stroke-width="1" />
+                                <!-- 頭の黄色い球体 -->
+                                <circle cx="0" cy="-20" r="4" fill="#facc15" stroke="#333" stroke-width="1" />
+                            </g>
 
                             <g id="svg-boats"></g>
                         </svg>

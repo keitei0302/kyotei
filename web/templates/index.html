@@ -317,6 +317,7 @@
                 }).filter(t => t > 0);
                 return times.length ? Math.min(...times) : 0;
             };
+            const bestST = getBest('show_time');
             const bestLap = getBest('lap_time');
             const bestTurn = getBest('turn_time');
             const bestStr = getBest('straight_time');
@@ -333,6 +334,7 @@
                 const strt = bi && bi.straight_time !== undefined ? parseFloat(bi.straight_time) : 0;
 
                 // 最速タイムかどうかの判定（一致すれば赤色強調）
+                const showClass = (st > 0 && st === bestST) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-300 font-bold';
                 const lapClass = (lap > 0 && lap === bestLap) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
                 const turnClass = (turn > 0 && turn === bestTurn) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
                 const strtClass = (strt > 0 && strt === bestStr) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
@@ -367,7 +369,7 @@
                             <div class="flex flex-col items-center">
                                 <span class="text-[9px] text-gray-500 mb-0.5" title="展示タイム">展示</span>
                                 <div class="flex items-center gap-1">
-                                    <span class="font-mono text-gray-300 font-bold">${st > 0 ? st.toFixed(2) : '-.--'}</span>
+                                    <span class="font-mono ${showClass} transition-all duration-300 inline-block">${st > 0 ? st.toFixed(2) : '-.--'}</span>
                                     <span class="${diffColor} font-mono text-[10px]">(${diff > 0 ? '+' : ''}${diff !== '--' ? diff : '-'})</span>
                                 </div>
                             </div>

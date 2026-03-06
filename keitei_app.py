@@ -599,7 +599,7 @@ def main():
                     form_mark = f"  ← \033[32m★的中！ ¥{hit_price}\033[0m"
             except:
                 pass
-        print(f"  [ﾌｫｰﾒｰｼｮﾝ] \033[1m{form_str}\033[0m (折り返し4点){form_mark}")
+        print(f"  \033[1m{form_str}\033[0m (折り返し4点){form_mark}")
         print("=" * 30)
 
     # ── 結果サマリー ──

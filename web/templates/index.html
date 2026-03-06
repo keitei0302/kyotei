@@ -309,6 +309,18 @@
             const avgTurn = getAvg('turn_time');
             const avgStr = getAvg('straight_time');
 
+            // 最速タイム（オリジナル展示）算出用
+            const getBest = (key) => {
+                const times = currentData.players.map(p => {
+                    const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || {};
+                    return parseFloat(bi[key] || 0);
+                }).filter(t => t > 0);
+                return times.length ? Math.min(...times) : 0;
+            };
+            const bestLap = getBest('lap_time');
+            const bestTurn = getBest('turn_time');
+            const bestStr = getBest('straight_time');
+
             currentData.players.forEach(p => {
                 const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0, tilt: 0, propeller: false, lap_time: 0, turn_time: 0, straight_time: 0 };
                 const ai = currentData.ai_results.find(r => r.teiban == p.teiban);
@@ -319,6 +331,11 @@
                 const lap = bi && bi.lap_time !== undefined ? parseFloat(bi.lap_time) : 0;
                 const turn = bi && bi.turn_time !== undefined ? parseFloat(bi.turn_time) : 0;
                 const strt = bi && bi.straight_time !== undefined ? parseFloat(bi.straight_time) : 0;
+
+                // 最速タイムかどうかの判定（一致すれば赤色強調）
+                const lapClass = (lap > 0 && lap === bestLap) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
+                const turnClass = (turn > 0 && turn === bestTurn) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
+                const strtClass = (strt > 0 && strt === bestStr) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
 
                 let origTags = [];
                 if (lap > 0 && avgLap > 0 && lap < avgLap - 0.1) origTags.push('<span class="text-[8px] bg-blue-500/20 text-blue-400 px-1 rounded border border-blue-500/30">総合◎</span>');
@@ -356,10 +373,10 @@
                             </div>
                             <div class="flex flex-col items-center border-l border-white/10 pl-4">
                                 <span class="text-[9px] text-gray-500 mb-0.5">周 / 回 / 直</span>
-                                <div class="font-mono text-gray-400 text-[10px] flex gap-1">
-                                    <span>${lap > 0 ? lap.toFixed(2) : '-.--'}</span> <span class="opacity-50">/</span>
-                                    <span>${turn > 0 ? turn.toFixed(2) : '-.--'}</span> <span class="opacity-50">/</span>
-                                    <span>${strt > 0 ? strt.toFixed(2) : '-.--'}</span>
+                                <div class="font-mono text-[10px] flex gap-1 items-center">
+                                    <span class="${lapClass} transition-all duration-300 inline-block">${lap > 0 ? lap.toFixed(2) : '-.--'}</span> <span class="text-gray-500 opacity-50">/</span>
+                                    <span class="${turnClass} transition-all duration-300 inline-block">${turn > 0 ? turn.toFixed(2) : '-.--'}</span> <span class="text-gray-500 opacity-50">/</span>
+                                    <span class="${strtClass} transition-all duration-300 inline-block">${strt > 0 ? strt.toFixed(2) : '-.--'}</span>
                                 </div>
                             </div>
                         </div>

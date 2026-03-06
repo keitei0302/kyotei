@@ -443,11 +443,15 @@
                 container.appendChild(div);
             });
 
-            // ── 推奨フォーメーション（4点折り返し）を全データから最適探索 ──
+            // ── 推奨フォーメーション（最適4点）を全データから探索 ──
             let bestFormScore = -1;
-            let bestF1, bestF2, bestF3, bestF4;
-            const boats = [1, 2, 3, 4, 5, 6];
+            let bestFormStr = "";
+            let bestFormCombos = [];
 
+            const boats = [1, 2, 3, 4, 5, 6];
+            let patterns = [];
+
+            // 1. 折り返し (A,B-A,B-C,D: 4点)
             for (let i = 0; i < boats.length; i++) {
                 for (let j = i + 1; j < boats.length; j++) {
                     const a = boats[i], b = boats[j];
@@ -455,42 +459,80 @@
                     for (let k = 0; k < remains.length; k++) {
                         for (let l = k + 1; l < remains.length; l++) {
                             const c = remains[k], d = remains[l];
-                            const combos = [`${a}-${b}-${c}`, `${a}-${b}-${d}`, `${b}-${a}-${c}`, `${b}-${a}-${d}`];
-                            let score = 0;
-
-                            if (hasOdds) {
-                                combos.forEach(cb => {
-                                    const bet = topBets.find(x => x.combo === cb);
-                                    if (bet) score += bet.ev;
-                                });
-                            } else {
-                                combos.forEach(cb => {
-                                    const [r1, r2, r3] = cb.split('-').map(Number);
-                                    const p1 = scores[r1] / total;
-                                    const p2 = scores[r2] / Math.max(total - scores[r1], 0.001);
-                                    const p3 = scores[r3] / Math.max(total - scores[r1] - scores[r2], 0.001);
-                                    score += (p1 * p2 * p3);
-                                });
-                            }
-
-                            if (score > bestFormScore) {
-                                bestFormScore = score;
-                                bestF1 = a; bestF2 = b; bestF3 = c; bestF4 = d;
-                            }
+                            patterns.push({
+                                str: `${a}${b}-${a}${b}-${c}${d}`,
+                                combos: [`${a}-${b}-${c}`, `${a}-${b}-${d}`, `${b}-${a}-${c}`, `${b}-${a}-${d}`]
+                            });
                         }
                     }
                 }
             }
 
-            if (bestF1 !== undefined) {
-                const f1 = bestF1, f2 = bestF2, f3 = bestF3, f4 = bestF4;
-                const formStr = `${f1}${f2}-${f1}${f2}=${f3}${f4}`;
-                let formMark = "";
-                if (hitCombo) {
-                    const [r1, r2, r3] = hitCombo.split('-').map(Number);
-                    if ([f1, f2].includes(r1) && [f1, f2].includes(r2) && r1 !== r2 && [f3, f4].includes(r3)) {
-                        formMark = `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce ml-2">的中！ ¥${hitPrice}</span>`;
+            // 2. 1着流し (A-B,C-B,C,D: 4点)
+            boats.forEach(a => {
+                const remA = boats.filter(x => x !== a);
+                for (let i = 0; i < remA.length; i++) {
+                    for (let j = i + 1; j < remA.length; j++) {
+                        const b = remA[i], c = remA[j];
+                        const remBC = remA.filter(x => x !== b && x !== c);
+                        remBC.forEach(d => {
+                            patterns.push({
+                                str: `${a}-${b}${c}-${b}${c}${d}`,
+                                combos: [`${a}-${b}-${c}`, `${a}-${b}-${d}`, `${a}-${c}-${b}`, `${a}-${c}-${d}`]
+                            });
+                            // 3. 1着流し逆 (A-B,C,D-B,C: 4点)
+                            patterns.push({
+                                str: `${a}-${b}${c}${d}-${b}${c}`,
+                                combos: [`${a}-${b}-${c}`, `${a}-${d}-${b}`, `${a}-${c}-${b}`, `${a}-${d}-${c}`]
+                            });
+                        });
                     }
+                }
+            });
+
+            // 4. 1着流し全 (A-全-F, A-F-全: 4点)
+            boats.forEach(a => {
+                const remA = boats.filter(x => x !== a);
+                remA.forEach(tgt => {
+                    const others = remA.filter(x => x !== tgt);
+                    patterns.push({
+                        str: `${a}-全-${tgt}`,
+                        combos: others.map(o => `${a}-${o}-${tgt}`)
+                    });
+                    patterns.push({
+                        str: `${a}-${tgt}-全`,
+                        combos: others.map(o => `${a}-${tgt}-${o}`)
+                    });
+                });
+            });
+
+            patterns.forEach(p => {
+                let score = 0;
+                if (hasOdds) {
+                    p.combos.forEach(cb => {
+                        const bet = topBets.find(x => x.combo === cb);
+                        if (bet) score += bet.ev;
+                    });
+                } else {
+                    p.combos.forEach(cb => {
+                        const [r1, r2, r3] = cb.split('-').map(Number);
+                        const p1 = scores[r1] / total;
+                        const p2 = scores[r2] / Math.max(total - scores[r1], 0.001);
+                        const p3 = scores[r3] / Math.max(total - scores[r1] - scores[r2], 0.001);
+                        score += (p1 * p2 * p3);
+                    });
+                }
+                if (score > bestFormScore) {
+                    bestFormScore = score;
+                    bestFormStr = p.str;
+                    bestFormCombos = p.combos;
+                }
+            });
+
+            if (bestFormStr) {
+                let formMark = "";
+                if (hitCombo && bestFormCombos.includes(hitCombo)) {
+                    formMark = `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce ml-2">的中！ ¥${hitPrice}</span>`;
                 }
                 const formDiv = document.createElement('div');
                 formDiv.className = `flex justify-between items-center p-3 mt-4 rounded-lg border border-indigo-500/50 bg-indigo-500/10 transition-all shadow-[0_4px_10px_rgba(99,102,241,0.1)] ${formMark ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : ''}`;

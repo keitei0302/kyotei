@@ -586,49 +586,94 @@ def main():
             final_bets.append(fmt_bet(label_map.get(idx,"期待"), c, f"(AI軸:{axis})"))
     print("=" * 30)
 
-    # ── 推奨フォーメーション（4点折り返し） ──
+    # ── 推奨フォーメーション（最適4点） ──
     best_form_score = -1
-    best_f1 = best_f2 = best_f3 = best_f4 = None
+    best_form_str = ""
+    best_form_combos = []
     
     import itertools
     boats = [1, 2, 3, 4, 5, 6]
     score_map = dict(zip(df['teiban'].astype(int), df['final_score']))
     total_s = sum(score_map.values()) if sum(score_map.values()) > 0 else 1.0
 
+    patterns = []
+    # 1. 1着2艇-2着同2艇-3着2艇 (折り返し A,B-A,B-C,D: 4点)
     for ab in itertools.combinations(boats, 2):
         a, b = ab
         remains = [x for x in boats if x not in ab]
         for cd in itertools.combinations(remains, 2):
             c, d = cd
             combos = [f"{a}-{b}-{c}", f"{a}-{b}-{d}", f"{b}-{a}-{c}", f"{b}-{a}-{d}"]
-            score = 0
-            if not df_bets.empty:
-                subset = df_bets[df_bets['combo'].isin(combos)]
-                score = subset['ev'].sum()
-            else:
-                for cb in combos:
+            patterns.append({"str": f"{a}{b}-{a}{b}-{c}{d}", "combos": combos, "type": "折り返し"})
+
+    # 2. 1着1艇-2着2艇-3着2着+別1艇 (A-B,C-B,C,D: 4点) 
+    for a in boats:
+        remains_a = [x for x in boats if x != a]
+        for bc in itertools.combinations(remains_a, 2):
+            b, c = bc
+            remains_bc = [x for x in remains_a if x not in bc]
+            for d in remains_bc:
+                patterns.append({
+                    "str": f"{a}-{b}{c}-{b}{c}{d}", 
+                    "combos": [f"{a}-{b}-{c}", f"{a}-{b}-{d}", f"{a}-{c}-{b}", f"{a}-{c}-{d}"],
+                    "type": "1着流し"
+                })
+
+    # 3. 1着1艇-2着2着+別1艇-3着2艇 (A-B,C,D-B,C: 4点) 
+    for a in boats:
+        remains_a = [x for x in boats if x != a]
+        for bc in itertools.combinations(remains_a, 2):
+            b, c = bc
+            remains_bc = [x for x in remains_a if x not in bc]
+            for d in remains_bc:
+                patterns.append({
+                    "str": f"{a}-{b}{c}{d}-{b}{c}", 
+                    "combos": [f"{a}-{b}-{c}", f"{a}-{d}-{b}", f"{a}-{c}-{b}", f"{a}-{d}-{c}"],
+                    "type": "1着流し"
+                })
+
+    # 4. 1着1艇-2着4艇-3着1艇 (A-B,C,D,E-F: 4点)
+    # 5. 1着1艇-2着1艇-3着4艇 (A-B-C,D,E,F: 4点)
+    for a in boats:
+        remains_a = [x for x in boats if x != a]
+        for target in remains_a:
+            others = [x for x in remains_a if x != target]
+            patterns.append({
+                "str": f"{a}-全-{target}",
+                "combos": [f"{a}-{o}-{target}" for o in others],
+                "type": "1着流し"
+            })
+            patterns.append({
+                "str": f"{a}-{target}-全",
+                "combos": [f"{a}-{target}-{o}" for o in others],
+                "type": "1着流し"
+            })
+
+    # 最適パターンの探索
+    for p in patterns:
+        score = 0
+        if not df_bets.empty:
+            subset = df_bets[df_bets['combo'].isin(p["combos"])]
+            score = subset['ev'].sum()
+        else:
+            for cb in p["combos"]:
+                try:
                     r1, r2, r3 = map(int, cb.split('-'))
                     p1 = score_map[r1] / total_s
                     p2 = score_map[r2] / max(total_s - score_map[r1], 0.001)
                     p3 = score_map[r3] / max(total_s - score_map[r1] - score_map[r2], 0.001)
                     score += p1 * p2 * p3
+                except: pass
+        if score > best_form_score:
+            best_form_score = score
+            best_form_str = p["str"]
+            best_form_combos = p["combos"]
             
-            if score > best_form_score:
-                best_form_score = score
-                best_f1, best_f2, best_f3, best_f4 = a, b, c, d
-
-    if best_f1 is not None:
-        f1, f2, f3, f4 = best_f1, best_f2, best_f3, best_f4
-        form_str = f"{f1}{f2}-{f1}{f2}={f3}{f4}"
+    if best_form_str:
         form_mark = ""
-        if hit_combo:
-            try:
-                hit_r1, hit_r2, hit_r3 = map(int, hit_combo.split('-'))
-                if hit_r1 in [f1, f2] and hit_r2 in [f1, f2] and hit_r1 != hit_r2 and hit_r3 in [f3, f4]:
-                    form_mark = f"  ← \033[32m★的中！ ¥{hit_price}\033[0m"
-            except:
-                pass
-        print(f"  \033[1m{form_str}\033[0m (折り返し4点){form_mark}")
+        if hit_combo and hit_combo in best_form_combos:
+            form_mark = f"  ← \033[32m★的中！ ¥{hit_price}\033[0m"
+        print(f"  \033[1m{best_form_str}\033[0m (ﾌｫｰﾒｰｼｮﾝ4点){form_mark}")
         print("=" * 30)
 
     # ── 結果サマリー ──

@@ -587,9 +587,38 @@ def main():
     print("=" * 30)
 
     # ── 推奨フォーメーション（4点折り返し） ──
-    top4 = df.sort_values(by='final_score', ascending=False)['teiban'].astype(int).tolist()[:4]
-    if len(top4) >= 4:
-        f1, f2, f3, f4 = top4
+    best_form_score = -1
+    best_f1 = best_f2 = best_f3 = best_f4 = None
+    
+    import itertools
+    boats = [1, 2, 3, 4, 5, 6]
+    score_map = dict(zip(df['teiban'].astype(int), df['final_score']))
+    total_s = sum(score_map.values()) if sum(score_map.values()) > 0 else 1.0
+
+    for ab in itertools.combinations(boats, 2):
+        a, b = ab
+        remains = [x for x in boats if x not in ab]
+        for cd in itertools.combinations(remains, 2):
+            c, d = cd
+            combos = [f"{a}-{b}-{c}", f"{a}-{b}-{d}", f"{b}-{a}-{c}", f"{b}-{a}-{d}"]
+            score = 0
+            if not df_bets.empty:
+                subset = df_bets[df_bets['combo'].isin(combos)]
+                score = subset['ev'].sum()
+            else:
+                for cb in combos:
+                    r1, r2, r3 = map(int, cb.split('-'))
+                    p1 = score_map[r1] / total_s
+                    p2 = score_map[r2] / max(total_s - score_map[r1], 0.001)
+                    p3 = score_map[r3] / max(total_s - score_map[r1] - score_map[r2], 0.001)
+                    score += p1 * p2 * p3
+            
+            if score > best_form_score:
+                best_form_score = score
+                best_f1, best_f2, best_f3, best_f4 = a, b, c, d
+
+    if best_f1 is not None:
+        f1, f2, f3, f4 = best_f1, best_f2, best_f3, best_f4
         form_str = f"{f1}{f2}-{f1}{f2}={f3}{f4}"
         form_mark = ""
         if hit_combo:

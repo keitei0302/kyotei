@@ -443,10 +443,47 @@
                 container.appendChild(div);
             });
 
-            // ── 推奨フォーメーション（4点折り返し）をUIの最後に追加 ──
-            const top4 = Object.entries(scores).sort((a, b) => b[1] - a[1]).map(e => Number(e[0])).slice(0, 4);
-            if (top4.length >= 4) {
-                const [f1, f2, f3, f4] = top4;
+            // ── 推奨フォーメーション（4点折り返し）を全データから最適探索 ──
+            let bestFormScore = -1;
+            let bestF1, bestF2, bestF3, bestF4;
+            const boats = [1, 2, 3, 4, 5, 6];
+
+            for (let i = 0; i < boats.length; i++) {
+                for (let j = i + 1; j < boats.length; j++) {
+                    const a = boats[i], b = boats[j];
+                    const remains = boats.filter(x => x !== a && x !== b);
+                    for (let k = 0; k < remains.length; k++) {
+                        for (let l = k + 1; l < remains.length; l++) {
+                            const c = remains[k], d = remains[l];
+                            const combos = [`${a}-${b}-${c}`, `${a}-${b}-${d}`, `${b}-${a}-${c}`, `${b}-${a}-${d}`];
+                            let score = 0;
+
+                            if (hasOdds) {
+                                combos.forEach(cb => {
+                                    const bet = topBets.find(x => x.combo === cb);
+                                    if (bet) score += bet.ev;
+                                });
+                            } else {
+                                combos.forEach(cb => {
+                                    const [r1, r2, r3] = cb.split('-').map(Number);
+                                    const p1 = scores[r1] / total;
+                                    const p2 = scores[r2] / Math.max(total - scores[r1], 0.001);
+                                    const p3 = scores[r3] / Math.max(total - scores[r1] - scores[r2], 0.001);
+                                    score += (p1 * p2 * p3);
+                                });
+                            }
+
+                            if (score > bestFormScore) {
+                                bestFormScore = score;
+                                bestF1 = a; bestF2 = b; bestF3 = c; bestF4 = d;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (bestF1 !== undefined) {
+                const f1 = bestF1, f2 = bestF2, f3 = bestF3, f4 = bestF4;
                 const formStr = `${f1}${f2}-${f1}${f2}=${f3}${f4}`;
                 let formMark = "";
                 if (hitCombo) {

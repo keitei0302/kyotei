@@ -16,6 +16,18 @@ def get_jst_now():
 
 from bs4 import BeautifulSoup
 import requests
+from urllib3.util import Retry
+from requests.adapters import HTTPAdapter
+
+def create_session():
+    """リトライ設定付きのrequestsセッションを作成"""
+    session = requests.Session()
+    retries = Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    session.mount('https://', HTTPAdapter(max_retries=retries))
+    session.mount('http://', HTTPAdapter(max_retries=retries))
+    return session
+
+session = create_session()
 
 warnings.filterwarnings("ignore")
 
@@ -35,7 +47,7 @@ def get_beforeinfo(place_no, race_no, date_str):
     headers = {'User-Agent': 'Mozilla/5.0'}
     result = {i: {'show_time': 0.0, 'tilt': 0.0, 'propeller': False, 'lap_time': 0.0, 'turn_time': 0.0, 'straight_time': 0.0, 'parts_exchange': 'なし'} for i in range(1, 7)}
     try:
-        res = requests.get(url, headers=headers, timeout=15)
+        res = session.get(url, headers=headers, timeout=20)
         soup = BeautifulSoup(res.content, 'html.parser')
 
         # 1. ヘッダーから列インデックスを特定
@@ -108,7 +120,7 @@ def get_beforeinfo(place_no, race_no, date_str):
         try:
             r_str, p_str = str(race_no).zfill(2), str(place_no).zfill(2)
             bc_url = f"https://race.boatcast.jp/txt/{p_str}/bc_oriten_{date_str}_{p_str}_{r_str}.txt"
-            res_bc = requests.get(bc_url, timeout=5)
+            res_bc = session.get(bc_url, timeout=10)
             if res_bc.status_code == 200:
                 res_bc.encoding = res_bc.apparent_encoding
                 lines = res_bc.text.strip().split('\n')
@@ -162,7 +174,7 @@ def get_odds3t(place_no, race_no, date_str):
     headers = {'User-Agent': 'Mozilla/5.0'}
     odds_dict = {}
     try:
-        res = requests.get(url, headers=headers, timeout=20)
+        res = session.get(url, headers=headers, timeout=25)
         res.encoding = res.apparent_encoding
         soup = BeautifulSoup(res.content, 'html.parser')
         tables = soup.select('div.contentsFrame table')
@@ -197,7 +209,7 @@ def get_race_result(place_no, race_no, date_str):
     headers = {'User-Agent': 'Mozilla/5.0'}
     result = {"rank": [], "dividends": {}}
     try:
-        res = requests.get(url, headers=headers, timeout=30)
+        res = session.get(url, headers=headers, timeout=30)
         res.encoding = res.apparent_encoding
         soup = BeautifulSoup(res.content, 'html.parser')
         full_text = soup.get_text(separator=' ')
@@ -250,7 +262,7 @@ def get_today_players(place_no, race_no, date_str):
     url = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno={race_no}&jcd={place_no}&hd={date_str}"
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
-        res = requests.get(url, headers=headers)
+        res = session.get(url, headers=headers, timeout=20)
         soup = BeautifulSoup(res.content, 'html.parser')
         
         # 締切予定時刻の取得
@@ -324,7 +336,7 @@ def get_player_course_data(toban):
                 pass # 詳細パースは後続で
         return course_stats
     except Exception as e:
-        print(f"[CourseData] Error: {e}")
+        print(f"[CourseData] Error ({toban}): {e}")
         return {}
 
 # ──────────────────────────────────────────
@@ -573,6 +585,22 @@ def main():
         for idx, c in enumerate(bets[:8]):
             final_bets.append(fmt_bet(label_map.get(idx,"期待"), c, f"(AI軸:{axis})"))
     print("=" * 30)
+
+    # ── 推奨フォーメーション（4点折り返し） ──
+    top4 = df.sort_values(by='final_score', ascending=False)['teiban'].astype(int).tolist()[:4]
+    if len(top4) >= 4:
+        f1, f2, f3, f4 = top4
+        form_str = f"{f1}{f2}-{f1}{f2}={f3}{f4}"
+        form_mark = ""
+        if hit_combo:
+            try:
+                hit_r1, hit_r2, hit_r3 = map(int, hit_combo.split('-'))
+                if hit_r1 in [f1, f2] and hit_r2 in [f1, f2] and hit_r1 != hit_r2 and hit_r3 in [f3, f4]:
+                    form_mark = f"  ← \033[32m★的中！ ¥{hit_price}\033[0m"
+            except:
+                pass
+        print(f"  [ﾌｫｰﾒｰｼｮﾝ] \033[1m{form_str}\033[0m (折り返し4点){form_mark}")
+        print("=" * 30)
 
     # ── 結果サマリー ──
     if hit_combo:

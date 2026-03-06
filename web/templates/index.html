@@ -442,6 +442,33 @@
                 `;
                 container.appendChild(div);
             });
+
+            // ── 推奨フォーメーション（4点折り返し）をUIの最後に追加 ──
+            const top4 = Object.entries(scores).sort((a, b) => b[1] - a[1]).map(e => Number(e[0])).slice(0, 4);
+            if (top4.length >= 4) {
+                const [f1, f2, f3, f4] = top4;
+                const formStr = `${f1}${f2}-${f1}${f2}=${f3}${f4}`;
+                let formMark = "";
+                if (hitCombo) {
+                    const [r1, r2, r3] = hitCombo.split('-').map(Number);
+                    if ([f1, f2].includes(r1) && [f1, f2].includes(r2) && r1 !== r2 && [f3, f4].includes(r3)) {
+                        formMark = `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce ml-2">的中！ ¥${hitPrice}</span>`;
+                    }
+                }
+                const formDiv = document.createElement('div');
+                formDiv.className = `flex justify-between items-center p-3 mt-4 rounded-lg border border-indigo-500/50 bg-indigo-500/10 transition-all shadow-[0_4px_10px_rgba(99,102,241,0.1)] ${formMark ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : ''}`;
+                formDiv.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="text-[10px] font-bold text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded border border-indigo-500/30">ﾌｫｰﾒｰｼｮﾝ</span>
+                        <div class="text-lg font-black tracking-widest text-indigo-100">${formStr}</div>
+                        ${formMark}
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] text-indigo-300/70 border border-indigo-500/20 px-1 py-0.5 rounded">折り返し 4点</div>
+                    </div>
+                `;
+                container.appendChild(formDiv);
+            }
         }
 
         function drawDiagram() {

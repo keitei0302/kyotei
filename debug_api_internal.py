@@ -5,7 +5,7 @@ import pandas as pd
 def debug_api_response():
     place = '16'
     race = '10'
-    today_str = '20260305'
+    today_str = '20260326'
     
     players_data = get_today_players(place, race, today_str)
     beforeinfo = get_beforeinfo(place, race, today_str)

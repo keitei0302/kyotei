@@ -277,6 +277,10 @@ def get_today_players(place_no, race_no, date_str):
                     if len(times) >= int(race_no):
                         deadline = times[int(race_no)-1]
 
+        def _safe_float(s, default=0.0):
+            try: return float(s)
+            except (ValueError, TypeError): return default
+
         results = []
         tbodies = soup.find_all('tbody', class_='is-fs12')
         for i, tbody in enumerate(tbodies[:6]): 
@@ -296,10 +300,10 @@ def get_today_players(place_no, race_no, date_str):
                 tds = trs[0].find_all('td')
                 if len(tds) >= 8:
                     st_txt = tds[3].text.strip()
-                    p['ST'] = float(st_txt.split()[-1]) if st_txt.split() else 0.15
-                    p['win_rate'] = float(tds[4].text.split()[0]) if tds[4].text.split() else 0.0 # 全国勝率
-                    p['local_win_rate'] = float(tds[5].text.split()[0]) if len(tds) > 5 and tds[5].text.split() else 0.0 # 当地勝率
-                    p['motor_2ren'] = float(tds[6].text.split()[1]) if len(tds[6].text.split()) > 1 else 0.0
+                    p['ST'] = _safe_float(st_txt.split()[-1], 0.15) if st_txt.split() else 0.15
+                    p['win_rate'] = _safe_float(tds[4].text.split()[0], 0.0) if tds[4].text.split() else 0.0 # 全国勝率
+                    p['local_win_rate'] = _safe_float(tds[5].text.split()[0], 0.0) if len(tds) > 5 and tds[5].text.split() else 0.0 # 当地勝率
+                    p['motor_2ren'] = _safe_float(tds[6].text.split()[1], 0.0) if len(tds[6].text.split()) > 1 else 0.0
             
             # 節間成績の取得 (着順の平均と節間ST平均)
             p['section_results'] = []
@@ -382,72 +386,105 @@ def predict_race(place_no, race_no, date_str, players_df):
 
 
 def apply_user_intuition(df_pred):
-    # 新しい強力な補正ロジック
+    # 新しい強力な補正ロジック (AIスコア + 各種最新データのダイナミック補正)
     df_pred['custom_prob'] = df_pred['ai_prob'].copy()
     
-    # 各種スコア計算
+    # 全艇の平均値を計算して偏差を評価しやすくする
+    valid_show = df_pred[df_pred['show_time'] > 0]['show_time']
+    avg_st = valid_show.mean() if not valid_show.empty else 0
+    valid_lap = df_pred[df_pred['lap_time'] > 0]['lap_time']
+    avg_lap = valid_lap.mean() if not valid_lap.empty else 0
+    valid_turn = df_pred[df_pred['turn_time'] > 0]['turn_time']
+    avg_turn = valid_turn.mean() if not valid_turn.empty else 0
+    valid_straight = df_pred[df_pred['straight_time'] > 0]['straight_time']
+    avg_straight = valid_straight.mean() if not valid_straight.empty else 0
+
     for i, row in df_pred.iterrows():
         score = row['ai_prob']
         
         # --- 1. 勝率アドバンテージ ---
-        # 全国勝率と当地勝率の平均を重視
         win_rate = row.get('win_rate', 0.0)
         local_win = row.get('local_win_rate', win_rate)
         avg_win_rate = (win_rate + local_win) / 2
-        if avg_win_rate >= 7.0:
-            score += 0.15
-        elif avg_win_rate >= 6.0:
-            score += 0.08
-        elif avg_win_rate < 4.0:
-            score -= 0.05
-            
+        
+        # A1級や勝率上位レーサーへのベース加点
+        if avg_win_rate >= 7.0: score += 0.15
+        elif avg_win_rate >= 6.0: score += 0.08
+        elif avg_win_rate < 4.0: score -= 0.08
+        
         # 当地が極端に高い（当地巧者）
         if local_win - win_rate >= 1.0 and local_win >= 6.0:
-            score += 0.05
+            score += 0.08
             
-        # --- 2. 展示タイムと節間タイム ---
-        if row.get('show_time', 0) > 0:
-            avg_st = df_pred[df_pred['show_time'] > 0]['show_time'].mean()
-            diff = avg_st - row['show_time']
-            # 展示が良いと最大+10%
-            score += diff * 2.5
+        # --- 2. 展示タイムとオリジナル展示タイム (Boatcast) ---
+        # 展示(行き足~伸び)の評価
+        if avg_st > 0 and row.get('show_time', 0) > 0:
+            diff_st = avg_st - row['show_time']
+            score += diff_st * 3.0  # 展示1番時計は大きく加点
             
-        if row.get('lap_time', 0) > 0:
-            avg_lap = df_pred[df_pred['lap_time'] > 0]['lap_time'].mean()
-            score += (avg_lap - row['lap_time']) * 0.5
+        # 一周タイム(総合力)の評価
+        if avg_lap > 0 and row.get('lap_time', 0) > 0:
+            diff_lap = avg_lap - row['lap_time']
+            score += diff_lap * 2.5
             
-        # --- 3. コース別・決まり手（逃げ・捲り）適性 ---
+        # まわり足(ターン回り)の評価
+        if avg_turn > 0 and row.get('turn_time', 0) > 0:
+            diff_turn = avg_turn - row['turn_time']
+            score += diff_turn * 3.0
+            
+        # 直線タイム(伸び)の評価
+        if avg_straight > 0 and row.get('straight_time', 0) > 0:
+            diff_straight = avg_straight - row['straight_time']
+            score += diff_straight * 1.5
+
+        # --- 3. コース別・モーター適性・決まり手（逃げ・捲り） ---
         course = int(row['teiban'])
+        motor_2ren = row.get('motor_2ren', 0.0)
+        st_timing = row.get('ST', 0.20)
+        
         if course == 1:
-            # イン逃げ評価
-            if avg_win_rate >= 6.0 and row.get('ST', 0.20) < 0.15:
-                score += 0.20 # 逃げ鉄板
-            if row.get('motor_2ren', 0) >= 40.0:
-                score += 0.05
+            # イン逃げ評価 (モーターが良くてSTが早いなら鉄板)
+            if avg_win_rate >= 6.0 and st_timing < 0.15:
+                score += 0.25 # 逃げ鉄板
+            if motor_2ren >= 40.0:
+                score += 0.10
+            elif motor_2ren < 30.0:
+                score -= 0.10 # インでもモーター劣勢は危険
         else:
             # ダッシュ・センターの捲り/差し評価
-            if course in [3, 4] and row.get('ST', 0.20) < 0.14 and avg_win_rate >= 6.0:
-                score += 0.10 # 捲り警戒
+            if course in [3, 4] and st_timing < 0.14 and avg_win_rate >= 6.0:
+                # 行き足(展示タイム)が良ければ捲り一撃の評価大
+                if avg_st > 0 and row.get('show_time', 0) < avg_st:
+                    score += 0.18 # 捲り警戒大
+                else:
+                    score += 0.10
             if course in [2, 5] and avg_win_rate >= 6.5:
-                score += 0.05 # 差し/捲り差し警戒
+                # 差し/捲り差し (まわり足が良いならさらに強化)
+                if avg_turn > 0 and row.get('turn_time', 0) < avg_turn:
+                    score += 0.15
+                else:
+                    score += 0.08
                 
         # --- 4. 部品交換情報 ---
         parts = str(row.get('parts_exchange', 'なし'))
         if parts != 'なし':
             if 'リング' in parts:
-                # リング交換は良化の兆しがある場合加点。基本はマイナス要素だが直前で変わる可能性
-                score += 0.02
-            elif 'ピストン' in parts or 'シリンダ' in parts:
-                score -= 0.05 # 大掛かりな整備は機力難の証明
+                score += 0.03 # 整備での良化期待
+            elif 'ピストン' in parts or 'シリンダ' in parts or 'クランク' in parts:
+                score -= 0.08 # 大掛かりな整備は機力難の証拠であることが多い
             elif 'キャブレタ' in parts or 'キャリアボデ' in parts:
-                score -= 0.02
+                score -= 0.04
                 
         if row.get('propeller', False):
-            score -= 0.03 # 新ペラは調整が間に合ってないリスク
+            # 新ペラは原則マイナスだが、勝率が高い(A1級)なら調整合わせてくる可能性
+            if avg_win_rate < 6.0:
+                score -= 0.05
+            else:
+                score -= 0.02
             
         df_pred.at[i, 'custom_prob'] = max(0.01, score)
         
-    # 正規化
+    # スコアの正規化
     total = df_pred['custom_prob'].sum()
     if total > 0:
         df_pred['custom_prob'] = df_pred['custom_prob'] / total
@@ -483,9 +520,10 @@ def display_condensed_info(players, beforeinfo, df_pred):
               f"{st:>4.2f}{diff_str:<6} {score:>5.1f}pt     {' '.join(tags)}")
     print("="*85)
 
+places = {"桐生":"01","戸田":"02","江戸川":"03","平和島":"04","多摩川":"05","浜名湖":"06","蒲郡":"07","常滑":"08","津":"09","三国":"10","びわこ":"11","住之江":"12","尼崎":"13","鳴門":"14","丸亀":"15","児島":"16","宮島":"17","徳山":"18","下関":"19","若松":"20","芦屋":"21","福岡":"22","唐津":"23","大村":"24"}
+
 def main():
     print("\n" + "="*60 + "\n   KEITEI AI - Phase 3 (UI凝縮 & 的中判定)\n" + "="*60)
-    places = {"桐生":"01","戸田":"02","江戸川":"03","平和島":"04","多摩川":"05","浜名湖":"06","蒲郡":"07","常滑":"08","津":"09","三国":"10","びわこ":"11","住之江":"12","尼崎":"13","鳴門":"14","丸亀":"15","児島":"16","宮島":"17","徳山":"18","下関":"19","若松":"20","芦屋":"21","福岡":"22","唐津":"23","大村":"24"}
     place_in = input("場名またはコード: ").strip()
     race_in = input("レース(1-12): ").strip()
     try:
@@ -675,6 +713,29 @@ def main():
             form_mark = f"  ← \033[32m★的中！ ¥{hit_price}\033[0m"
         print(f"  \033[1m{best_form_str}\033[0m (ﾌｫｰﾒｰｼｮﾝ4点){form_mark}")
         print("=" * 30)
+
+    # ── 今後のAI精度向上のためのデータ蓄積 ──
+    # 当日のレース特徴量と予測スコアをローカルに保存し、翌日の結果結合→再学習に備える
+    try:
+        os.makedirs("data", exist_ok=True)
+        # 不要なオブジェクト（関数など）が混ざらないよう、必要な列だけ抽出して辞書化
+        save_df = df.copy()
+        # teiban等のカテゴリが残っている場合は文字列化
+        for col in save_df.columns:
+            if str(save_df[col].dtype) == 'category':
+                save_df[col] = save_df[col].astype(str)
+                
+        # レース全体のメタデータを付与
+        save_df['eval_date'] = d_str
+        save_df['eval_place'] = p_no
+        save_df['eval_race'] = r_no
+        
+        # JSONLines 形式で保存 (1行1レコード)
+        with open("data/daily_features.jsonl", "a", encoding="utf-8") as f:
+            for _, r in save_df.iterrows():
+                f.write(json.dumps(r.to_dict(), ensure_ascii=False) + "\\n")
+    except Exception as e:
+        print(f"[Debug] Failed to save daily features: {e}")
 
     # ── 結果サマリー ──
     if hit_combo:

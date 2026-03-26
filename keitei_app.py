@@ -389,6 +389,11 @@ def apply_user_intuition(df_pred):
     # 新しい強力な補正ロジック (AIスコア + 各種最新データのダイナミック補正)
     df_pred['custom_prob'] = df_pred['ai_prob'].copy()
     
+    # 型安全の保証 (スクレイピングデータ由来の文字列混入を防ぎ、比較演算でのTypeErrorを防止)
+    for col in ['show_time', 'lap_time', 'turn_time', 'straight_time']:
+        if col in df_pred.columns:
+            df_pred[col] = pd.to_numeric(df_pred[col], errors='coerce').fillna(0.0)
+
     # 全艇の平均値を計算して偏差を評価しやすくする
     valid_show = df_pred[df_pred['show_time'] > 0]['show_time']
     avg_st = valid_show.mean() if not valid_show.empty else 0

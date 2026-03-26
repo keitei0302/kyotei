@@ -488,6 +488,11 @@ def apply_user_intuition(df_pred):
     total = df_pred['custom_prob'].sum()
     if total > 0:
         df_pred['custom_prob'] = df_pred['custom_prob'] / total
+        
+    # FastAPIやJSON出力でエラーにならないようNumPy型をネイティブfloatに変換し、NaNを除去
+    df_pred['ai_prob'] = df_pred['ai_prob'].astype(float)
+    df_pred['custom_prob'] = df_pred['custom_prob'].astype(float)
+    df_pred = df_pred.fillna(0)
     
     return df_pred
 # ──────────────────────────────────────────

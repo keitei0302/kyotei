@@ -20,7 +20,8 @@ templates = Jinja2Templates(directory="web/templates")
 
 @app.get("/")
 async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    # 最新のStarlette/FastAPI仕様に対応するため、キーワード引数で明確に指定する
+    return templates.TemplateResponse(request=request, name="index.html", context={})
 
 from concurrent.futures import ThreadPoolExecutor
 

@@ -168,6 +168,11 @@
                     <div id="recommendations" class="space-y-3">
                         <!-- Recs injected here -->
                     </div>
+                    <div id="log-button-container" class="mt-6 text-center" style="display: none;">
+                        <button id="log-btn" onclick="logToSpreadsheet()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
+                            💾 この直感調整をAIに学習させる
+                        </button>
+                    </div>
                 </div>
 
                 <div class="glass p-6">
@@ -219,6 +224,13 @@
 
         async function logToSpreadsheet() {
             if (!currentData || currentData.error || !currentData.ai_results) return;
+            
+            const btn = document.getElementById('log-btn');
+            if (btn) { 
+                btn.innerText = '送信中...'; 
+                btn.disabled = true; 
+            }
+
             const place = document.getElementById('place').value;
             const race = document.getElementById('race_no').value;
             const payload = {
@@ -242,8 +254,17 @@
                     body: JSON.stringify(payload)
                 });
                 console.log("[Log] Data sent to Spreadsheet");
+                
+                if (btn) {
+                    btn.innerText = '✅ 学習データとして保管完了';
+                    btn.className = "w-full bg-gray-700 text-gray-300 font-bold py-3 px-4 rounded-xl shadow-inner cursor-not-allowed flex items-center justify-center gap-2";
+                }
             } catch (e) {
                 console.error("[Log] Failed to send data:", e);
+                if (btn) { 
+                    btn.innerText = '⚠️ 送信失敗（再試行してください）'; 
+                    btn.disabled = false; 
+                }
             }
         }
 
@@ -269,7 +290,18 @@
 
                 renderUI();
                 drawDiagram();
-                logToSpreadsheet(); // 予想開始時にロギング
+                
+                // 学習ボタンのリセットと表示
+                if (currentData && !currentData.error) {
+                    const btnCont = document.getElementById('log-button-container');
+                    const btn = document.getElementById('log-btn');
+                    if (btnCont && btn) {
+                        btnCont.style.display = 'block';
+                        btn.innerText = '💾 この直感調整をAIに学習させる';
+                        btn.disabled = false;
+                        btn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2";
+                    }
+                }
             } catch (e) {
                 console.error("Fetch Error:", e);
             }

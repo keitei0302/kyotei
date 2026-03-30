@@ -200,6 +200,7 @@
     </div>
 
     <script>
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbwh7_5Flj0I4VK1Aj6lwlC97f-RBeGhH6wRhnX0hYgkI4A2ZgL4xjsGZxpp3hJOax3a/exec";
         let currentData = null;
         let intuitions = { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1 };
         let hitCombo = null;
@@ -216,6 +217,36 @@
             activeBtn.classList.remove('text-gray-400');
         }
 
+        async function logToSpreadsheet() {
+            if (!currentData || currentData.error || !currentData.ai_results) return;
+            const place = document.getElementById('place').value;
+            const race = document.getElementById('race_no').value;
+            const payload = {
+                race_id: `${new Date().toISOString().split('T')[0]}_${place}_${race}`,
+                place: place,
+                race_no: race,
+                boat1_val: intuitions[1],
+                boat2_val: intuitions[2],
+                boat3_val: intuitions[3],
+                boat4_val: intuitions[4],
+                boat5_val: intuitions[5],
+                boat6_val: intuitions[6],
+                ai_base_score: currentData.ai_results.map(r => ({ teiban: r.teiban, score: r.ai_prob }))
+            };
+
+            try {
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(payload)
+                });
+                console.log("[Log] Data sent to Spreadsheet");
+            } catch (e) {
+                console.error("[Log] Failed to send data:", e);
+            }
+        }
+
         async function fetchPrediction() {
             const place = document.getElementById('place').value;
             const race = document.getElementById('race_no').value;
@@ -226,7 +257,6 @@
             document.getElementById('boat-list').innerHTML = '<div class="glass p-10 text-center">データ解析中（最新AI搭載）...</div>';
 
             try {
-                // キャッシュを強制回避するためタイムスタンプ付与
                 const res = await fetch(`/api/predict?place=${place}&race=${race}&t=${Date.now()}`);
                 currentData = await res.json();
 
@@ -239,6 +269,7 @@
 
                 renderUI();
                 drawDiagram();
+                logToSpreadsheet(); // 予想開始時にロギング
             } catch (e) {
                 console.error("Fetch Error:", e);
             }
@@ -409,8 +440,27 @@
 
             let scores = {};
             let total = 0;
+
+            // 展開相関係数の定義
+            const correlations = {
+                4: { multiplier: 1.15, targets: [5, 6], threshold: 1.2 }, // 4カド捲り展開
+                1: { multiplier: 1.10, targets: [2, 3], threshold: 0.8, inverse: true } // 1号艇機力不安→差し展開
+            };
+
             currentData.ai_results.forEach(r => {
-                const w = intuitions[r.teiban] || 1.0;
+                let w = intuitions[r.teiban] || 1.0;
+                
+                // 相関ロジックの適用
+                Object.keys(correlations).forEach(key => {
+                    const config = correlations[key];
+                    const sliderVal = intuitions[key];
+                    const isTriggered = config.inverse ? (sliderVal <= config.threshold) : (sliderVal >= config.threshold);
+                    
+                    if (isTriggered && config.targets.includes(r.teiban)) {
+                        w *= config.multiplier;
+                    }
+                });
+
                 const s = (r.custom_prob || r.ai_prob || 0.01) * w;
                 scores[r.teiban] = s;
                 total += s;
@@ -570,8 +620,10 @@
 
         function drawDiagram() {
             const boatG = document.getElementById('svg-boats');
-            if (!boatG || !currentData) return;
-            boatG.innerHTML = '';
+            if (!boatG || !currentData || currentData.error || !currentData.ai_results) {
+                if (boatG) boatG.innerHTML = '';
+                return;
+            }
 
             // 公式と同じ艇番カラー
             const colors = ["#ffffff", "#333333", "#ef4444", "#3b82f6", "#facc15", "#22c55e"];

@@ -32,10 +32,37 @@ session = create_session()
 warnings.filterwarnings("ignore")
 
 # ──────────────────────────────────────────
-# 共通設定
+# 共通設定・ロギング
 # ──────────────────────────────────────────
 CACHE_DIR = "cache"
+DATA_DIR = "data"
 if not os.path.exists(CACHE_DIR): os.makedirs(CACHE_DIR)
+if not os.path.exists(DATA_DIR): os.makedirs(DATA_DIR)
+
+class ConfidenceManager:
+    """ベイズ更新によるユーザー確信度（Confidence Score）の管理"""
+    def __init__(self, log_path="data/daily_features.jsonl"):
+        self.log_path = log_path
+        self.base_confidence = 1.0
+
+    def get_confidence_score(self, teiban):
+        """
+        過去のログから『ユーザーがn号艇を推した時の的中率』を算出し、
+        確信度係数を算出する。的中率が高いほど係数が強化される。
+        """
+        try:
+            if not os.path.exists(self.log_path):
+                return self.base_confidence
+
+            # 簡易的な的中率分析（プロトタイプ）
+            # 本来はレース結果(rank)と照合して的中・不的中を判定するが、
+            # 現状はデータ蓄積を優先し、デフォルト値を返す基盤として実装
+            # ※将来的にスプレッドシートやJSONLを解析して動的に更新
+            return self.base_confidence # 学習データが蓄積されるまで1.0
+        except:
+            return self.base_confidence
+
+confidence_manager = ConfidenceManager()
 
 # ──────────────────────────────────────────
 # データ取得系
@@ -486,7 +513,13 @@ def apply_user_intuition(df_pred):
                 score -= 0.05
             else:
                 score -= 0.02
-            
+        
+        # --- 5. ベイズ更新エンジンによる確信度補正 (Slider_Value x Confidence_Score) ---
+        # ユーザーがスライダー（フロントエンド）で調整した際の「効き目」を過去実績から強化する基盤
+        confidence_score = confidence_manager.get_confidence_score(int(row['teiban']))
+        # 最終スコアへの反映（内部エンジン側での基本重み付け）
+        score = score * confidence_score
+
         df_pred.at[i, 'custom_prob'] = max(0.01, score)
         
     # スコアの正規化

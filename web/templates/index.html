@@ -210,6 +210,8 @@
         let intuitions = { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1 };
         let hitCombo = null;
         let hitPrice = null;
+        let currentTopBets = [];
+        let currentBestForm = "";
 
         function setRace(r) {
             document.getElementById('race_no').value = r;
@@ -243,7 +245,9 @@
                 boat4_val: intuitions[4],
                 boat5_val: intuitions[5],
                 boat6_val: intuitions[6],
-                ai_base_score: currentData.ai_results.map(r => ({ teiban: r.teiban, score: r.ai_prob }))
+                ai_base_score: currentData.ai_results.map(r => ({ teiban: r.teiban, score: r.ai_prob })),
+                recommended_bets: currentTopBets.join(', '),
+                recommended_form: currentBestForm
             };
 
             try {
@@ -648,6 +652,10 @@
                 `;
                 container.appendChild(formDiv);
             }
+
+            // グローバル変数に格納してロギング可能にする
+            currentTopBets = topBets.slice(0, 8).map(b => b.combo);
+            currentBestForm = bestFormStr || "";
         }
 
         function drawDiagram() {

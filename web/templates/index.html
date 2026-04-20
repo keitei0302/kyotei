@@ -506,6 +506,32 @@
             let topBets = [];
             const hasOdds = currentData.odds && Object.keys(currentData.odds).length > 0;
 
+            const getSujiMultiplier = (combo) => {
+                const [r1, r2, r3] = combo.split('-').map(Number);
+                const patterns = [
+                    { name: "1-23-234", cond: () => r1===1 && [2,3].includes(r2) && [2,3,4].includes(r3) },
+                    { name: "1-3-245", cond: () => r1===1 && r2===3 && [2,4,5].includes(r3) },
+                    { name: "1-4-235", cond: () => r1===1 && r2===4 && [2,3,5].includes(r3) },
+                    { name: "1-5-全", cond: () => r1===1 && r2===5 },
+                    { name: "2-1-34", cond: () => r1===2 && r2===1 && [3,4].includes(r3) },
+                    { name: "2-34-345", cond: () => r1===2 && [3,4].includes(r2) && [3,4,5].includes(r3) },
+                    { name: "2-56-全", cond: () => r1===2 && [5,6].includes(r2) },
+                    { name: "3-1-24", cond: () => r1===3 && r2===1 && [2,4].includes(r3) },
+                    { name: "3-2-45", cond: () => r1===3 && r2===2 && [4,5].includes(r3) },
+                    { name: "3-45-126", cond: () => r1===3 && [4,5].includes(r2) && [1,2,6].includes(r3) },
+                    { name: "4-12-125", cond: () => r1===4 && [1,2].includes(r2) && [1,2,5].includes(r3) },
+                    { name: "4-5-16", cond: () => r1===4 && r2===5 && [1,6].includes(r3) },
+                    { name: "5-16-全", cond: () => r1===5 && [1,6].includes(r2) },
+                    { name: "5-4-16", cond: () => r1===5 && r2===4 && [1,6].includes(r3) },
+                    { name: "6-12-全", cond: () => r1===6 && [1,2].includes(r2) },
+                    { name: "6-145-全", cond: () => r1===6 && ([4,5].includes(r2) || r2===1) }
+                ];
+                for (let p of patterns) {
+                    if (p.cond()) return { mul: 1.35, name: p.name };
+                }
+                return { mul: 1.0, name: "" };
+            };
+
             if (hasOdds) {
                 Object.entries(currentData.odds).forEach(([combo, odds]) => {
                     const [t1, t2, t3] = combo.split('-').map(Number);
@@ -513,21 +539,33 @@
                     const p2 = scores[t2] / (total - scores[t1] || 1);
                     const p3 = scores[t3] / (total - scores[t1] - scores[t2] || 1);
                     const prob = p1 * p2 * p3;
-                    topBets.push({ combo, prob, odds, ev: prob * odds });
+                    const baseEv = prob * odds;
+                    
+                    const suji = getSujiMultiplier(combo);
+                    topBets.push({ combo, prob, odds, ev: baseEv, adjusted_ev: baseEv * suji.mul, suji_name: suji.name });
                 });
-                topBets.sort((a, b) => b.ev - a.ev);
+                topBets.sort((a, b) => b.adjusted_ev - a.adjusted_ev);
             } else {
-                // オッズがない場合：AI軸8点
-                const top6 = Object.entries(scores).sort((a, b) => b[1] - a[1]).map(e => Number(e[0]));
-                const axis = top6[0], others = top6.slice(1);
-                for (let j of others) {
-                    for (let k of others) {
-                        if (j === k) continue;
-                        topBets.push({ combo: `${axis}-${j}-${k}`, ev: 0, odds: 0 });
-                        if (topBets.length >= 8) break;
+                // オッズがない場合
+                const boats = [1, 2, 3, 4, 5, 6];
+                for (let i = 0; i < boats.length; i++) {
+                    for (let j = 0; j < boats.length; j++) {
+                        if (i === j) continue;
+                        for (let k = 0; k < boats.length; k++) {
+                            if (i === k || j === k) continue;
+                            const r1 = boats[i], r2 = boats[j], r3 = boats[k];
+                            const p1 = scores[r1] / total;
+                            const p2 = scores[r2] / Math.max(total - scores[r1], 0.001);
+                            const p3 = scores[r3] / Math.max(total - scores[r1] - scores[r2], 0.001);
+                            const score = p1 * p2 * p3;
+                            
+                            const combo = `${r1}-${r2}-${r3}`;
+                            const suji = getSujiMultiplier(combo);
+                            topBets.push({ combo, ev: score, odds: 0, adjusted_ev: score * suji.mul, suji_name: suji.name });
+                        }
                     }
-                    if (topBets.length >= 8) break;
                 }
+                topBets.sort((a, b) => b.adjusted_ev - a.adjusted_ev);
             }
 
             topBets.slice(0, 8).forEach((b, i) => {
@@ -535,127 +573,25 @@
                 const div = document.createElement('div');
                 div.className = `flex justify-between items-center p-3 rounded-lg border transition-all ${isHit ? 'bg-emerald-500/20 border-emerald-500 shadow-lg scale-[1.02]' : 'bg-white/5 border-white/10'}`;
 
+                const badge = b.suji_name ? `<span class="px-2 py-0.5 bg-indigo-500/30 text-indigo-300 border border-indigo-500/50 text-[10px] rounded ml-2">スジ: ${b.suji_name}</span>` : '';
+
                 div.innerHTML = `
                     <div class="flex items-center gap-3">
                         <div class="text-lg font-black tracking-widest">${b.combo}</div>
+                        ${badge}
                         ${isHit ? `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce">的中！ ¥${hitPrice}</span>` : ''}
                     </div>
                     <div class="text-right">
-                        <div class="text-[10px] text-gray-500">${b.odds > 0 ? b.odds.toFixed(1) + '倍' : 'AI予測軸'}</div>
-                        <div class="text-xs font-bold ${b.ev > 1.2 ? 'text-indigo-400' : 'text-gray-400'}">${b.ev > 0 ? 'EV ' + b.ev.toFixed(2) : '---'}</div>
+                        <div class="text-[10px] text-gray-500">${b.odds > 0 ? b.odds.toFixed(1) + '倍' : 'AI予測スコア'}</div>
+                        <div class="text-xs font-bold ${b.ev > 1.2 ? 'text-indigo-400' : 'text-gray-400'}">${b.ev > 0 ? (b.odds > 0 ? 'EV ' + b.ev.toFixed(2) : (b.ev * 100).toFixed(2) + 'pt') : '---'}</div>
                     </div>
                 `;
                 container.appendChild(div);
             });
 
-            // ── 推奨フォーメーション（最適4点）を全データから探索 ──
-            let bestFormScore = -1;
-            let bestFormStr = "";
-            let bestFormCombos = [];
-
-            const boats = [1, 2, 3, 4, 5, 6];
-            let patterns = [];
-
-            // 1. 折り返し (A,B-A,B-C,D: 4点)
-            for (let i = 0; i < boats.length; i++) {
-                for (let j = i + 1; j < boats.length; j++) {
-                    const a = boats[i], b = boats[j];
-                    const remains = boats.filter(x => x !== a && x !== b);
-                    for (let k = 0; k < remains.length; k++) {
-                        for (let l = k + 1; l < remains.length; l++) {
-                            const c = remains[k], d = remains[l];
-                            patterns.push({
-                                str: `${a}${b}-${a}${b}-${c}${d}`,
-                                combos: [`${a}-${b}-${c}`, `${a}-${b}-${d}`, `${b}-${a}-${c}`, `${b}-${a}-${d}`]
-                            });
-                        }
-                    }
-                }
-            }
-
-            // 2. 1着流し (A-B,C-B,C,D: 4点)
-            boats.forEach(a => {
-                const remA = boats.filter(x => x !== a);
-                for (let i = 0; i < remA.length; i++) {
-                    for (let j = i + 1; j < remA.length; j++) {
-                        const b = remA[i], c = remA[j];
-                        const remBC = remA.filter(x => x !== b && x !== c);
-                        remBC.forEach(d => {
-                            patterns.push({
-                                str: `${a}-${b}${c}-${b}${c}${d}`,
-                                combos: [`${a}-${b}-${c}`, `${a}-${b}-${d}`, `${a}-${c}-${b}`, `${a}-${c}-${d}`]
-                            });
-                            // 3. 1着流し逆 (A-B,C,D-B,C: 4点)
-                            patterns.push({
-                                str: `${a}-${b}${c}${d}-${b}${c}`,
-                                combos: [`${a}-${b}-${c}`, `${a}-${d}-${b}`, `${a}-${c}-${b}`, `${a}-${d}-${c}`]
-                            });
-                        });
-                    }
-                }
-            });
-
-            // 4. 1着流し全 (A-全-F, A-F-全: 4点)
-            boats.forEach(a => {
-                const remA = boats.filter(x => x !== a);
-                remA.forEach(tgt => {
-                    const others = remA.filter(x => x !== tgt);
-                    patterns.push({
-                        str: `${a}-全-${tgt}`,
-                        combos: others.map(o => `${a}-${o}-${tgt}`)
-                    });
-                    patterns.push({
-                        str: `${a}-${tgt}-全`,
-                        combos: others.map(o => `${a}-${tgt}-${o}`)
-                    });
-                });
-            });
-
-            patterns.forEach(p => {
-                let score = 0;
-                if (hasOdds) {
-                    p.combos.forEach(cb => {
-                        const bet = topBets.find(x => x.combo === cb);
-                        if (bet) score += bet.ev;
-                    });
-                } else {
-                    p.combos.forEach(cb => {
-                        const [r1, r2, r3] = cb.split('-').map(Number);
-                        const p1 = scores[r1] / total;
-                        const p2 = scores[r2] / Math.max(total - scores[r1], 0.001);
-                        const p3 = scores[r3] / Math.max(total - scores[r1] - scores[r2], 0.001);
-                        score += (p1 * p2 * p3);
-                    });
-                }
-                if (score > bestFormScore) {
-                    bestFormScore = score;
-                    bestFormStr = p.str;
-                    bestFormCombos = p.combos;
-                }
-            });
-
-            if (bestFormStr) {
-                let formMark = "";
-                if (hitCombo && bestFormCombos.includes(hitCombo)) {
-                    formMark = `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce ml-2">的中！ ¥${hitPrice}</span>`;
-                }
-                const formDiv = document.createElement('div');
-                formDiv.className = `flex justify-between items-center p-3 mt-4 rounded-lg border border-indigo-500/50 bg-indigo-500/10 transition-all shadow-[0_4px_10px_rgba(99,102,241,0.1)] ${formMark ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : ''}`;
-                formDiv.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <div class="text-lg font-black tracking-widest text-indigo-100">${bestFormStr}</div>
-                        ${formMark}
-                    </div>
-                    <div class="text-right">
-                        <div class="text-[10px] text-indigo-300/70 border border-indigo-500/20 px-1 py-0.5 rounded">折り返し 4点</div>
-                    </div>
-                `;
-                container.appendChild(formDiv);
-            }
-
             // グローバル変数に格納してロギング可能にする
             currentTopBets = topBets.slice(0, 8).map(b => b.combo);
-            currentBestForm = bestFormStr || "";
+            currentBestForm = "";
         }
 
         function drawDiagram() {

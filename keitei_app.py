@@ -72,7 +72,7 @@ def get_beforeinfo(place_no, race_no, date_str):
     """直前情報ページから展示タイム・チルト角度・プロペラ交換情報を取得（動的カラム特定版）"""
     url = f"https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno={race_no}&jcd={place_no}&hd={date_str}"
     headers = {'User-Agent': 'Mozilla/5.0'}
-    result = {i: {'show_time': 0.0, 'tilt': 0.0, 'propeller': False, 'lap_time': 0.0, 'turn_time': 0.0, 'straight_time': 0.0, 'parts_exchange': 'なし'} for i in range(1, 7)}
+    result = {i: {'show_time': 0.0, 'tilt': 0.0, 'propeller': False, 'lap_time': 0.0, 'turn_time': 0.0, 'straight_time': 0.0, 'parts_exchange': 'なし', 'start_exhibition': None} for i in range(1, 7)}
     try:
         res = session.get(url, headers=headers, timeout=20)
         soup = BeautifulSoup(res.content, 'html.parser')
@@ -184,6 +184,27 @@ def get_beforeinfo(place_no, race_no, date_str):
                                     except: pass
                         except: pass
         except: pass
+
+        # 5. スタート展示の取得
+        try:
+            times = soup.find_all('span', class_=re.compile('table1_boatImage1Time'))
+            boat_icons = soup.find_all('span', class_=re.compile('table1_boatImage1My'))
+            if len(times) == len(boat_icons) and len(times) >= 6:
+                for b, t in zip(boat_icons, times):
+                    cls = b.get('class', [])
+                    for c in cls:
+                        if c.startswith('is-type'):
+                            b_num = int(c[-1])
+                            txt = t.get_text(strip=True)
+                            is_f = 'F' in txt
+                            val_str = txt.replace('F', '').replace('L', '').strip()
+                            try:
+                                val = float(val_str)
+                                if is_f: val = -val
+                                result[b_num]['start_exhibition'] = val
+                            except: pass
+        except Exception as e:
+            print(f"[StartExhibition] Error: {e}")
 
     except Exception as e:
         print(f"[BeforeInfo] Error: {e}")
@@ -402,6 +423,7 @@ def predict_race(place_no, race_no, date_str, players_df):
         players_df['lap_time'] = [before_info.get(int(t), {}).get('lap_time', 0.0) for t in players_df['teiban']]
         players_df['turn_time'] = [before_info.get(int(t), {}).get('turn_time', 0.0) for t in players_df['teiban']]
         players_df['straight_time'] = [before_info.get(int(t), {}).get('straight_time', 0.0) for t in players_df['teiban']]
+        players_df['start_exhibition'] = [before_info.get(int(t), {}).get('start_exhibition', None) for t in players_df['teiban']]
     except:
         players_df['ai_prob'] = 1/6
         players_df['show_time'] = 0.0
@@ -409,6 +431,7 @@ def predict_race(place_no, race_no, date_str, players_df):
         players_df['lap_time'] = 0.0
         players_df['turn_time'] = 0.0
         players_df['straight_time'] = 0.0
+        players_df['start_exhibition'] = None
     return players_df
 
 
@@ -469,33 +492,58 @@ def apply_user_intuition(df_pred):
             diff_straight = avg_straight - row['straight_time']
             score += diff_straight * 1.5
 
-        # --- 3. コース別・モーター適性・決まり手（逃げ・捲り） ---
+        # --- 3. コース・モーター・ST（スタート想定）と能力評価の連動 ---
         course = int(row['teiban'])
         motor_2ren = row.get('motor_2ren', 0.0)
-        st_timing = row.get('ST', 0.20)
+        st_timing = row.get('ST', 0.15)
+        st_ex = row.get('start_exhibition', None)
         
+        diff_st = 0
+        is_fast_but_low_skill = False
+        
+        if pd.notna(st_ex):
+            # 前提(展示ST)よりも想定ST(平均ST)が早い(差分が-0.03より小さい)場合
+            diff_st = st_timing - st_ex
+            
+            if diff_st <= -0.03:
+                # 突き抜け(とても有利)
+                if avg_win_rate >= 6.0:
+                    score += 0.20
+                else:
+                    score += 0.05
+                    is_fast_but_low_skill = True # 後続艇が有利になる展開フラグ
+            
+            # 展示STが早い(スリット優勢、握り率が高い)場合の捲り・捲り差し
+            if st_ex < 0.10 and course in [3, 4, 5]:
+                if avg_win_rate >= 5.5:
+                    score += 0.15
+                else:
+                    score += 0.05
+                    is_fast_but_low_skill = True
+        
+        # 1号艇・2号艇の評価（ST予測は早いだけで有利とはならない。能力が高ければ多少遅くても逃げる/差す）
         if course == 1:
-            # イン逃げ評価 (モーターが良くてSTが早いなら鉄板)
-            if avg_win_rate >= 6.0 and st_timing < 0.15:
-                score += 0.25 # 逃げ鉄板
+            if avg_win_rate >= 6.5:
+                # STが少々遅くても(0.18等)逃げ切れる
+                if st_timing <= 0.18:
+                    score += 0.20
+            else:
+                if st_timing < 0.15:
+                    score += 0.15
+            
             if motor_2ren >= 40.0:
                 score += 0.10
             elif motor_2ren < 30.0:
-                score -= 0.10 # インでもモーター劣勢は危険
+                score -= 0.10
+        elif course == 2:
+            if avg_win_rate >= 6.0:
+                score += 0.15 # 2コースの差し
         else:
-            # ダッシュ・センターの捲り/差し評価
-            if course in [3, 4] and st_timing < 0.14 and avg_win_rate >= 6.0:
-                # 行き足(展示タイム)が良ければ捲り一撃の評価大
-                if avg_st > 0 and row.get('show_time', 0) < avg_st:
-                    score += 0.18 # 捲り警戒大
-                else:
-                    score += 0.10
-            if course in [2, 5] and avg_win_rate >= 6.5:
-                # 差し/捲り差し (まわり足が良いならさらに強化)
-                if avg_turn > 0 and row.get('turn_time', 0) < avg_turn:
-                    score += 0.15
-                else:
-                    score += 0.08
+            if st_timing < 0.14 and avg_win_rate >= 6.0:
+                score += 0.12 # ダッシュ・センターの一発
+                
+        # 後で後続艇を加点するためのフラグをDataFrameに記録
+        df_pred.at[i, 'is_fast_but_low_skill'] = is_fast_but_low_skill
                 
         # --- 4. 部品交換情報 ---
         parts = str(row.get('parts_exchange', 'なし'))
@@ -522,6 +570,17 @@ def apply_user_intuition(df_pred):
 
         df_pred.at[i, 'custom_prob'] = max(0.01, score)
         
+    # --- 後続艇への波及評価 ---
+    # is_fast_but_low_skill フラグが立っている艇の外側艇の期待値を上げる
+    for i, row in df_pred.iterrows():
+        if row.get('is_fast_but_low_skill', False):
+            c = int(row['teiban'])
+            for j, r in df_pred.iterrows():
+                if int(r['teiban']) == c + 1:
+                    df_pred.at[j, 'custom_prob'] += 0.10 # 捲りの展開に乗る
+                elif int(r['teiban']) == c + 2:
+                    df_pred.at[j, 'custom_prob'] += 0.05
+                    
     # スコアの正規化
     total = df_pred['custom_prob'].sum()
     if total > 0:
@@ -637,125 +696,81 @@ def main():
         print(f"  [{label}] \033[1m{combo}\033[0m {detail}{mark}")
         return combo
 
+    def get_suji_multiplier(combo):
+        try:
+            r1, r2, r3 = map(int, combo.split('-'))
+            suji_patterns = {
+                "1-23-234": lambda: r1==1 and r2 in [2,3] and r3 in [2,3,4],
+                "1-3-245": lambda: r1==1 and r2==3 and r3 in [2,4,5],
+                "1-4-235": lambda: r1==1 and r2==4 and r3 in [2,3,5],
+                "1-5-全": lambda: r1==1 and r2==5,
+                "2-1-34": lambda: r1==2 and r2==1 and r3 in [3,4],
+                "2-34-345": lambda: r1==2 and r2 in [3,4] and r3 in [3,4,5],
+                "2-56-全": lambda: r1==2 and r2 in [5,6],
+                "3-1-24": lambda: r1==3 and r2==1 and r3 in [2,4],
+                "3-2-45": lambda: r1==3 and r2==2 and r3 in [4,5],
+                "3-45-126": lambda: r1==3 and r2 in [4,5] and r3 in [1,2,6],
+                "4-12-125": lambda: r1==4 and r2 in [1,2] and r3 in [1,2,5],
+                "4-5-16": lambda: r1==4 and r2==5 and r3 in [1,6],
+                "5-16-全": lambda: r1==5 and r2 in [1,6],
+                "5-4-16": lambda: r1==5 and r2==4 and r3 in [1,6],
+                "6-12-全": lambda: r1==6 and r2 in [1,2],
+                "6-145-全": lambda: r1==6 and (r2 in [4,5] or r2==1)
+            }
+            for name, condition in suji_patterns.items():
+                if condition(): return 1.35, name
+        except: pass
+        return 1.0, ""
+
     if not df_bets.empty:
-        # オッズがある場合（レース前）
-        tops = df_bets.sort_values(by=['prob','ev'], ascending=False).head(2)
-        for _, r in tops.iterrows():
-            final_bets.append(fmt_bet("本命", r['combo'], f"({r['odds']:.1f}倍)"))
-        himos = df_bets[~df_bets['combo'].isin(final_bets)].sort_values(by='ev', ascending=False).head(4)
-        for _, r in himos.iterrows():
-            final_bets.append(fmt_bet("期待", r['combo'], f"(期待値:{r['ev']:.2f})"))
-        anas = df_bets[~df_bets['combo'].isin(final_bets) & (df_bets['odds']>=35)].sort_values(by='ev', ascending=False).head(2)
-        for _, r in anas.iterrows():
-            final_bets.append(fmt_bet(" 穴 ", r['combo'], f"({r['odds']:.1f}倍)"))
-    else:
-        # オッズなし（レース終了後）：AIスコア上位を1着軸に、2〜3着を全方位カバー
-        top6 = df.sort_values(by='final_score', ascending=False)['teiban'].astype(int).tolist()
-        axis = top6[0]  # スコア1位を1着軸に固定
-        others = top6[1:]  # 残り5艇
-        bets = []
-        # 2〜3着を全組み合わせ (5C2 × 2方向 = 20通り) → スコア順で上位8点
-        for j in others:
-            for k in others:
-                if j == k: continue
-                c = f"{axis}-{j}-{k}"
-                if c not in bets: bets.append(c)
-                if len(bets) >= 8: break
-            if len(bets) >= 8: break
-        label_map = {0:"本命",1:"本命",2:"期待",3:"期待",4:"期待",5:"期待",6:" 穴 ",7:" 穴 "}
-        for idx, c in enumerate(bets[:8]):
-            final_bets.append(fmt_bet(label_map.get(idx,"期待"), c, f"(AI軸:{axis})"))
-    print("=" * 30)
-
-    # ── 推奨フォーメーション（最適4点） ──
-    best_form_score = -1
-    best_form_str = ""
-    best_form_combos = []
-    
-    import itertools
-    boats = [1, 2, 3, 4, 5, 6]
-    score_map = dict(zip(df['teiban'].astype(int), df['final_score']))
-    total_s = sum(score_map.values()) if sum(score_map.values()) > 0 else 1.0
-
-    patterns = []
-    # 1. 1着2艇-2着同2艇-3着2艇 (折り返し A,B-A,B-C,D: 4点)
-    for ab in itertools.combinations(boats, 2):
-        a, b = ab
-        remains = [x for x in boats if x not in ab]
-        for cd in itertools.combinations(remains, 2):
-            c, d = cd
-            combos = [f"{a}-{b}-{c}", f"{a}-{b}-{d}", f"{b}-{a}-{c}", f"{b}-{a}-{d}"]
-            patterns.append({"str": f"{a}{b}-{a}{b}-{c}{d}", "combos": combos, "type": "折り返し"})
-
-    # 2. 1着1艇-2着2艇-3着2着+別1艇 (A-B,C-B,C,D: 4点) 
-    for a in boats:
-        remains_a = [x for x in boats if x != a]
-        for bc in itertools.combinations(remains_a, 2):
-            b, c = bc
-            remains_bc = [x for x in remains_a if x not in bc]
-            for d in remains_bc:
-                patterns.append({
-                    "str": f"{a}-{b}{c}-{b}{c}{d}", 
-                    "combos": [f"{a}-{b}-{c}", f"{a}-{b}-{d}", f"{a}-{c}-{b}", f"{a}-{c}-{d}"],
-                    "type": "1着流し"
-                })
-
-    # 3. 1着1艇-2着2着+別1艇-3着2艇 (A-B,C,D-B,C: 4点) 
-    for a in boats:
-        remains_a = [x for x in boats if x != a]
-        for bc in itertools.combinations(remains_a, 2):
-            b, c = bc
-            remains_bc = [x for x in remains_a if x not in bc]
-            for d in remains_bc:
-                patterns.append({
-                    "str": f"{a}-{b}{c}{d}-{b}{c}", 
-                    "combos": [f"{a}-{b}-{c}", f"{a}-{d}-{b}", f"{a}-{c}-{b}", f"{a}-{d}-{c}"],
-                    "type": "1着流し"
-                })
-
-    # 4. 1着1艇-2着4艇-3着1艇 (A-B,C,D,E-F: 4点)
-    # 5. 1着1艇-2着1艇-3着4艇 (A-B-C,D,E,F: 4点)
-    for a in boats:
-        remains_a = [x for x in boats if x != a]
-        for target in remains_a:
-            others = [x for x in remains_a if x != target]
-            patterns.append({
-                "str": f"{a}-全-{target}",
-                "combos": [f"{a}-{o}-{target}" for o in others],
-                "type": "1着流し"
-            })
-            patterns.append({
-                "str": f"{a}-{target}-全",
-                "combos": [f"{a}-{target}-{o}" for o in others],
-                "type": "1着流し"
-            })
-
-    # 最適パターンの探索
-    for p in patterns:
-        score = 0
-        if not df_bets.empty:
-            subset = df_bets[df_bets['combo'].isin(p["combos"])]
-            score = subset['ev'].sum()
-        else:
-            for cb in p["combos"]:
-                try:
-                    r1, r2, r3 = map(int, cb.split('-'))
-                    p1 = score_map[r1] / total_s
-                    p2 = score_map[r2] / max(total_s - score_map[r1], 0.001)
-                    p3 = score_map[r3] / max(total_s - score_map[r1] - score_map[r2], 0.001)
-                    score += p1 * p2 * p3
-                except: pass
-        if score > best_form_score:
-            best_form_score = score
-            best_form_str = p["str"]
-            best_form_combos = p["combos"]
+        # オッズあり: EV（期待値）に対してスジ補正をかける
+        df_bets['adjusted_ev'] = 0.0
+        df_bets['suji_name'] = ""
+        for i, r in df_bets.iterrows():
+            mul, s_name = get_suji_multiplier(r['combo'])
+            df_bets.at[i, 'adjusted_ev'] = r['ev'] * mul
+            df_bets.at[i, 'suji_name'] = s_name
             
-    if best_form_str:
-        form_mark = ""
-        if hit_combo and hit_combo in best_form_combos:
-            form_mark = f"  ← \033[32m★的中！ ¥{hit_price}\033[0m"
-        print(f"  \033[1m{best_form_str}\033[0m (ﾌｫｰﾒｰｼｮﾝ4点){form_mark}")
-        print("=" * 30)
+        # スコア上位8点を抽出
+        tops = df_bets.sort_values(by='adjusted_ev', ascending=False).head(8)
+        
+        for idx, (i, r) in enumerate(tops.iterrows()):
+            label = "本命" if idx < 2 else ("期待" if idx < 6 else " 穴 ")
+            s_name = r['suji_name']
+            detail = f"(期待値:{r['ev']:.2f})"
+            if s_name: detail += f" [スジ:{s_name}]"
+            else: detail += f" ({r['odds']:.1f}倍)"
+            final_bets.append(fmt_bet(label, r['combo'], detail))
+            
+    else:
+        # オッズなし: すべての3連単(120通り)についてAIスコアを計算しスジ補正
+        all_combos = []
+        import itertools
+        score_map = dict(zip(df['teiban'].astype(int), df['final_score']))
+        total_s = sum(score_map.values()) if sum(score_map.values()) > 0 else 1.0
+        
+        for c in itertools.permutations([1,2,3,4,5,6], 3):
+            combo = f"{c[0]}-{c[1]}-{c[2]}"
+            p1 = score_map[c[0]] / total_s
+            p2 = score_map[c[1]] / max(total_s - score_map[c[0]], 0.001)
+            p3 = score_map[c[2]] / max(total_s - score_map[c[0]] - score_map[c[1]], 0.001)
+            score = p1 * p2 * p3
+            
+            mul, s_name = get_suji_multiplier(combo)
+            adj_score = score * mul
+            all_combos.append({'combo': combo, 'score': score, 'adjusted_score': adj_score, 'suji_name': s_name})
+            
+        df_all = pd.DataFrame(all_combos)
+        tops = df_all.sort_values(by='adjusted_score', ascending=False).head(8)
+        
+        for idx, (i, r) in enumerate(tops.iterrows()):
+            label = "本命" if idx < 2 else ("期待" if idx < 6 else " 穴 ")
+            s_name = r['suji_name']
+            detail = f"(スコア:{r['score']*100:.2f})"
+            if s_name: detail += f" [スジ:{s_name}]"
+            final_bets.append(fmt_bet(label, r['combo'], detail))
+
+    print("=" * 30)
 
     # ── 今後のAI精度向上のためのデータ蓄積 ──
     # 当日のレース特徴量と予測スコアをローカルに保存し、翌日の結果結合→再学習に備える

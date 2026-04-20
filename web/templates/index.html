@@ -568,22 +568,69 @@
                 topBets.sort((a, b) => b.adjusted_ev - a.adjusted_ev);
             }
 
+            const boatColors = {
+                1: { bg: 'bg-gray-100', text: 'text-gray-900', border: 'border-gray-300' },
+                2: { bg: 'bg-neutral-800', text: 'text-white', border: 'border-neutral-600' },
+                3: { bg: 'bg-red-500', text: 'text-white', border: 'border-red-400' },
+                4: { bg: 'bg-blue-500', text: 'text-white', border: 'border-blue-400' },
+                5: { bg: 'bg-yellow-400', text: 'text-gray-900', border: 'border-yellow-300' },
+                6: { bg: 'bg-emerald-500', text: 'text-white', border: 'border-emerald-400' }
+            };
+
             topBets.slice(0, 8).forEach((b, i) => {
                 const isHit = b.combo === hitCombo;
+                const [r1, r2, r3] = b.combo.split('-').map(Number);
+                const c1 = boatColors[r1], c2 = boatColors[r2], c3 = boatColors[r3];
+                
+                let rankLabel = "";
+                let rankStyle = "";
+                if (i < 2) {
+                    rankLabel = "本命";
+                    rankStyle = "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]";
+                } else if (i < 5) {
+                    rankLabel = "対抗";
+                    rankStyle = "bg-slate-700 text-slate-200";
+                } else {
+                    rankLabel = " 穴 ";
+                    rankStyle = "bg-slate-800/80 text-gray-400 border border-slate-700";
+                }
+
                 const div = document.createElement('div');
-                div.className = `flex justify-between items-center p-3 rounded-lg border transition-all ${isHit ? 'bg-emerald-500/20 border-emerald-500 shadow-lg scale-[1.02]' : 'bg-white/5 border-white/10'}`;
+                div.className = `flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 rounded-xl border transition-all relative overflow-hidden group ${
+                    isHit ? 'bg-emerald-500/10 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 
+                    (i < 2 ? 'bg-white/5 border-indigo-500/30' : 'bg-black/20 border-white/5')
+                }`;
 
-                const badge = b.suji_name ? `<span class="px-2 py-0.5 bg-indigo-500/30 text-indigo-300 border border-indigo-500/50 text-[10px] rounded ml-2">スジ: ${b.suji_name}</span>` : '';
+                if (i < 2 && !isHit) {
+                    // 本命用のうっすらハイライト
+                    div.innerHTML += `<div class="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-transparent pointer-events-none"></div>`;
+                }
 
-                div.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <div class="text-lg font-black tracking-widest">${b.combo}</div>
+                const badge = b.suji_name ? `<div class="mt-2 sm:mt-0 flex items-center gap-1"><span class="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] rounded-full whitespace-nowrap"><span class="text-indigo-400 mr-1">❖</span>${b.suji_name}</span></div>` : '';
+                
+                div.innerHTML += `
+                    <div class="flex items-center gap-4 z-10 w-full sm:w-auto">
+                        <div class="flex items-center justify-center w-10 text-[10px] font-bold rounded-lg py-1 ${rankStyle} transform -skew-x-12 shrink-0">
+                            <div class="skew-x-12">${rankLabel}</div>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="flex items-center justify-center w-7 h-7 rounded shadow-sm font-black text-sm border ${c1.bg} ${c1.text} ${c1.border}">${r1}</span>
+                            <span class="text-gray-500 font-black text-xs">-</span>
+                            <span class="flex items-center justify-center w-7 h-7 rounded shadow-sm font-black text-sm border ${c2.bg} ${c2.text} ${c2.border}">${r2}</span>
+                            <span class="text-gray-500 font-black text-xs">-</span>
+                            <span class="flex items-center justify-center w-7 h-7 rounded shadow-sm font-black text-sm border ${c3.bg} ${c3.text} ${c3.border}">${r3}</span>
+                        </div>
                         ${badge}
-                        ${isHit ? `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce">的中！ ¥${hitPrice}</span>` : ''}
+                        ${isHit ? `<span class="ml-auto sm:ml-2 px-2.5 py-1 bg-emerald-500 text-white text-xs rounded-full font-bold shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse shrink-0">🎯 的中! ¥${hitPrice}</span>` : ''}
                     </div>
-                    <div class="text-right">
-                        <div class="text-[10px] text-gray-500">${b.odds > 0 ? b.odds.toFixed(1) + '倍' : 'AI予測スコア'}</div>
-                        <div class="text-xs font-bold ${b.ev > 1.2 ? 'text-indigo-400' : 'text-gray-400'}">${b.ev > 0 ? (b.odds > 0 ? 'EV ' + b.ev.toFixed(2) : (b.ev * 100).toFixed(2) + 'pt') : '---'}</div>
+                    <div class="text-left sm:text-right w-full sm:w-auto flex sm:block justify-between items-center mt-3 sm:mt-0 pt-2 sm:pt-0 border-t border-white/5 sm:border-0 z-10">
+                        <div class="text-[10px] text-gray-500 uppercase tracking-widest">${b.odds > 0 ? '予想オッズ' : 'AI予測スコア'}</div>
+                        <div class="flex items-baseline gap-2">
+                            <div class="text-sm font-bold ${b.odds > 0 ? (i < 2 ? 'text-indigo-400' : 'text-gray-300') : 'text-gray-300'}">
+                                ${b.odds > 0 ? b.odds.toFixed(1) + '<span class="text-[10px] text-gray-500 ml-0.5">倍</span>' : (b.ev * 100).toFixed(1) + '<span class="text-[10px] text-gray-500 ml-0.5">pt</span>'}
+                            </div>
+                            <div class="text-[10px] text-indigo-400/80 font-mono hidden sm:block">${b.odds > 0 ? (b.ev > 0 ? 'EV:' + b.ev.toFixed(2) : '') : ''}</div>
+                        </div>
                     </div>
                 `;
                 container.appendChild(div);

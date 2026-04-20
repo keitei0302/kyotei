@@ -606,8 +606,6 @@
                     div.innerHTML += `<div class="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-transparent pointer-events-none"></div>`;
                 }
 
-                const badge = b.suji_name ? `<div class="mt-2 sm:mt-0 flex items-center gap-1"><span class="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] rounded-full whitespace-nowrap"><span class="text-indigo-400 mr-1">❖</span>${b.suji_name}</span></div>` : '';
-                
                 div.innerHTML += `
                     <div class="flex items-center gap-4 z-10 w-full sm:w-auto">
                         <div class="flex items-center justify-center w-10 text-[10px] font-bold rounded-lg py-1 ${rankStyle} transform -skew-x-12 shrink-0">
@@ -620,7 +618,6 @@
                             <span class="text-gray-500 font-black text-xs">-</span>
                             <span class="flex items-center justify-center w-7 h-7 rounded shadow-sm font-black text-sm border ${c3.bg} ${c3.text} ${c3.border}">${r3}</span>
                         </div>
-                        ${badge}
                         ${isHit ? `<span class="ml-auto sm:ml-2 px-2.5 py-1 bg-emerald-500 text-white text-xs rounded-full font-bold shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse shrink-0">🎯 的中! ¥${hitPrice}</span>` : ''}
                     </div>
                     <div class="text-left sm:text-right w-full sm:w-auto flex sm:block justify-between items-center mt-3 sm:mt-0 pt-2 sm:pt-0 border-t border-white/5 sm:border-0 z-10">
@@ -629,7 +626,6 @@
                             <div class="text-sm font-bold ${b.odds > 0 ? (i < 2 ? 'text-indigo-400' : 'text-gray-300') : 'text-gray-300'}">
                                 ${b.odds > 0 ? b.odds.toFixed(1) + '<span class="text-[10px] text-gray-500 ml-0.5">倍</span>' : (b.ev * 100).toFixed(1) + '<span class="text-[10px] text-gray-500 ml-0.5">pt</span>'}
                             </div>
-                            <div class="text-[10px] text-indigo-400/80 font-mono hidden sm:block">${b.odds > 0 ? (b.ev > 0 ? 'EV:' + b.ev.toFixed(2) : '') : ''}</div>
                         </div>
                     </div>
                 `;

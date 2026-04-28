@@ -697,29 +697,7 @@ def main():
         return combo
 
     def get_suji_multiplier(combo):
-        try:
-            r1, r2, r3 = map(int, combo.split('-'))
-            suji_patterns = {
-                "1-23-234": lambda: r1==1 and r2 in [2,3] and r3 in [2,3,4],
-                "1-3-245": lambda: r1==1 and r2==3 and r3 in [2,4,5],
-                "1-4-235": lambda: r1==1 and r2==4 and r3 in [2,3,5],
-                "1-5-全": lambda: r1==1 and r2==5,
-                "2-1-34": lambda: r1==2 and r2==1 and r3 in [3,4],
-                "2-34-345": lambda: r1==2 and r2 in [3,4] and r3 in [3,4,5],
-                "2-56-全": lambda: r1==2 and r2 in [5,6],
-                "3-1-24": lambda: r1==3 and r2==1 and r3 in [2,4],
-                "3-2-45": lambda: r1==3 and r2==2 and r3 in [4,5],
-                "3-45-126": lambda: r1==3 and r2 in [4,5] and r3 in [1,2,6],
-                "4-12-125": lambda: r1==4 and r2 in [1,2] and r3 in [1,2,5],
-                "4-5-16": lambda: r1==4 and r2==5 and r3 in [1,6],
-                "5-16-全": lambda: r1==5 and r2 in [1,6],
-                "5-4-16": lambda: r1==5 and r2==4 and r3 in [1,6],
-                "6-12-全": lambda: r1==6 and r2 in [1,2],
-                "6-145-全": lambda: r1==6 and (r2 in [4,5] or r2==1)
-            }
-            for name, condition in suji_patterns.items():
-                if condition(): return 1.35, name
-        except: pass
+        # スジによる加点（1.35倍等）を無効化し、AIの純粋なスコアで評価するように変更
         return 1.0, ""
 
     if not df_bets.empty:

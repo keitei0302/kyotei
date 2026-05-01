@@ -285,8 +285,11 @@
             const placeName = placeSelect.options[placeSelect.selectedIndex].text;
             const race = document.getElementById('race_no').value;
             
-            const betsText = currentTopBets.slice(0, 3).map((bet, idx) => {
-                const label = idx < 2 ? "🎯本命" : "🔥期待";
+            const betsText = currentTopBets.map((bet, idx) => {
+                let label = "";
+                if (idx < 2) label = "🎯本命";
+                else if (idx < 6) label = "🔥期待";
+                else label = "💎 穴 ";
                 return `${label} ${bet}`;
             }).join('\n');
 

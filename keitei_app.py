@@ -347,19 +347,44 @@ def get_today_players(place_no, race_no, date_str):
             if trs:
                 tds = trs[0].find_all('td')
                 if len(tds) >= 8:
-                    st_txt = tds[3].text.strip()
-                    p['ST'] = _safe_float(st_txt.split()[-1], 0.15) if st_txt.split() else 0.15
+                    st_parts = tds[3].get_text(separator=' ').split()
+                    f_count, l_count, st_val = 0, 0, 0.15
+                    for part in st_parts:
+                        if part.startswith('F'):
+                            try: f_count = int(part.replace('F', ''))
+                            except: pass
+                        elif part.startswith('L'):
+                            try: l_count = int(part.replace('L', ''))
+                            except: pass
+                        else:
+                            try: st_val = float(part)
+                            except: pass
+                    p['ST'] = st_val
+                    p['F_count'] = f_count
+                    p['L_count'] = l_count
+                    
                     p['win_rate'] = _safe_float(tds[4].text.split()[0], 0.0) if tds[4].text.split() else 0.0 # 全国勝率
                     p['local_win_rate'] = _safe_float(tds[5].text.split()[0], 0.0) if len(tds) > 5 and tds[5].text.split() else 0.0 # 当地勝率
-                    p['motor_2ren'] = _safe_float(tds[6].text.split()[1], 0.0) if len(tds[6].text.split()) > 1 else 0.0
+                    
+                    motor_parts = tds[6].get_text(separator=' ').split()
+                    p['motor_no'] = motor_parts[0] if len(motor_parts) > 0 else '0'
+                    p['motor_2ren'] = _safe_float(motor_parts[1], 0.0) if len(motor_parts) > 1 else 0.0
+                    
+                    boat_parts = tds[7].get_text(separator=' ').split()
+                    p['boat_no'] = boat_parts[0] if len(boat_parts) > 0 else '0'
+                    p['boat_2ren'] = _safe_float(boat_parts[1], 0.0) if len(boat_parts) > 1 else 0.0
             
             # 節間成績の取得 (着順の平均と節間ST平均)
             p['section_results'] = []
             p['section_st_avg'] = 0.0
+            p['hidden_F'] = False
             if len(trs) >= 3:
-                # 3行目が節間成績であることが多い（公式ページ構造）
-                results_tds = trs[2].find_all('td')
-                # ※必要に応じて詳細なスクレイピングを補強
+                # 3行目以降が節間成績であることが多い
+                for tr in trs[2:]:
+                    for td in tr.find_all('td'):
+                        txt = td.get_text(strip=True)
+                        if 'F' in txt or 'L' in txt:
+                            p['hidden_F'] = True
             
             results.append(p)
         return {"players": results, "deadline": deadline} if len(results) == 6 else None
@@ -409,8 +434,8 @@ def predict_race(place_no, race_no, date_str, players_df):
             t = int(row['teiban'])
             bi = before_info.get(t, {'show_time': 6.8, 'propeller': False})
             records.append({
-                'place_no': str(place_no), 'teiban': str(t), 'motor_no': '1',
-                'show_time': float(bi['show_time']), 'entry_course': t, 'st': 0.15
+                'place_no': str(place_no), 'teiban': str(t), 'motor_no': str(row.get('motor_no', '1')),
+                'show_time': float(bi.get('show_time', 6.8)), 'entry_course': t, 'st': float(row.get('ST', 0.15))
             })
         X = pd.DataFrame(records)
         for col, le in encoders.items():
@@ -424,6 +449,7 @@ def predict_race(place_no, race_no, date_str, players_df):
         players_df['turn_time'] = [before_info.get(int(t), {}).get('turn_time', 0.0) for t in players_df['teiban']]
         players_df['straight_time'] = [before_info.get(int(t), {}).get('straight_time', 0.0) for t in players_df['teiban']]
         players_df['start_exhibition'] = [before_info.get(int(t), {}).get('start_exhibition', None) for t in players_df['teiban']]
+
     except:
         players_df['ai_prob'] = 1/6
         players_df['show_time'] = 0.0
@@ -542,6 +568,27 @@ def apply_user_intuition(df_pred):
             if st_timing < 0.14 and avg_win_rate >= 6.0:
                 score += 0.12 # ダッシュ・センターの一発
                 
+        # --- フライング(F)・出遅れ(L)・隠れFによるペナルティ ---
+        f_count = row.get('F_count', 0)
+        hidden_f = row.get('hidden_F', False)
+        
+        # 隠れF（今節すでにFを切っているなど）はスタートが極めて慎重になる
+        if hidden_f:
+            score -= 0.15
+            if f_count >= 1:
+                score -= 0.10 # すでにF持ちでさらに今節Fを切った（F2相当）
+                
+        if f_count == 1:
+            score -= 0.10 # F1はスタート慎重になる
+            if pd.isna(st_ex) or st_ex > 0.15: 
+                score -= 0.05 # 展示STも遅い場合はさらにマイナス
+        elif f_count >= 2:
+            score -= 0.25 # F2以上は致命的
+            
+        l_count = row.get('L_count', 0)
+        if l_count >= 1:
+            score -= 0.15
+                
         # 後で後続艇を加点するためのフラグをDataFrameに記録
         df_pred.at[i, 'is_fast_but_low_skill'] = is_fast_but_low_skill
                 
@@ -618,7 +665,16 @@ def display_condensed_info(players, beforeinfo, df_pred):
         if diff < -0.05: tags.append("★一番時計")
         elif diff < 0: tags.append("気配良")
         if p.get('win_rate', 0) > 6.5: tags.append("格上")
-        print(f"{t:<2} {p['name']:<15} {p['win_rate']:>4.2f}/{p['ST']:>4.2f}  "
+        if p.get('hidden_F', False): tags.append(f"\033[31m[隠F]\033[0m")
+        if p.get('F_count', 0) > 0: tags.append(f"\033[31m[F{p['F_count']}]\033[0m")
+        if p.get('L_count', 0) > 0: tags.append(f"\033[31m[L{p['L_count']}]\033[0m")
+        
+        f_str = ""
+        if p.get('hidden_F', False): f_str += "[隠F]"
+        if p.get('F_count', 0) > 0: f_str += f"[F{p['F_count']}]"
+        name_disp = f"{f_str}{p['name']}"
+        
+        print(f"{t:<2} {name_disp:<15} {p['win_rate']:>4.2f}/{p['ST']:>4.2f}  "
               f"{st:>4.2f}{diff_str:<6} {score:>5.1f}pt     {' '.join(tags)}")
     print("="*85)
 

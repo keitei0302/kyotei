@@ -173,6 +173,12 @@
                             💾 この直感調整をAIに学習させる
                         </button>
                     </div>
+                    <div id="share-button-container" class="mt-4 text-center" style="display: none;">
+                        <button onclick="shareToX()" class="w-full bg-black hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-xl border border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)] transition-all flex items-center justify-center gap-2">
+                            <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                            予想を 𝕏 でシェア
+                        </button>
+                    </div>
                 </div>
 
                 <div class="glass p-6">
@@ -272,6 +278,24 @@
             }
         }
 
+        function shareToX() {
+            if (!currentTopBets || currentTopBets.length === 0) return;
+            
+            const placeSelect = document.getElementById('place');
+            const placeName = placeSelect.options[placeSelect.selectedIndex].text;
+            const race = document.getElementById('race_no').value;
+            
+            const betsText = currentTopBets.slice(0, 3).map((bet, idx) => {
+                const label = idx < 2 ? "🎯本命" : "🔥期待";
+                return `${label} ${bet}`;
+            }).join('\\n');
+
+            const text = `🚤 ${placeName} ${race}R のAI予想\\n\\n${betsText}\\n\\n#競艇 #AI予想 #BOATRACE`;
+            const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+            
+            window.open(url, '_blank');
+        }
+
         async function fetchPrediction() {
             const place = document.getElementById('place').value;
             const race = document.getElementById('race_no').value;
@@ -298,6 +322,7 @@
                 // 学習ボタンのリセットと表示
                 if (currentData && !currentData.error) {
                     const btnCont = document.getElementById('log-button-container');
+                    const shareCont = document.getElementById('share-button-container');
                     const btn = document.getElementById('log-btn');
                     if (btnCont && btn) {
                         btnCont.style.display = 'block';
@@ -305,6 +330,7 @@
                         btn.disabled = false;
                         btn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2";
                     }
+                    if (shareCont) shareCont.style.display = 'block';
                 }
             } catch (e) {
                 console.error("Fetch Error:", e);

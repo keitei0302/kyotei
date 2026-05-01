@@ -288,9 +288,9 @@
             const betsText = currentTopBets.slice(0, 3).map((bet, idx) => {
                 const label = idx < 2 ? "🎯本命" : "🔥期待";
                 return `${label} ${bet}`;
-            }).join('\\n');
+            }).join('\n');
 
-            const text = `🚤 ${placeName} ${race}R のAI予想\\n\\n${betsText}\\n\\n#競艇 #AI予想 #BOATRACE`;
+            const text = `🚤 ${placeName} ${race}R のAI予想\n\n${betsText}\n\n#競艇 #AI予想 #BOATRACE`;
             const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
             
             window.open(url, '_blank');

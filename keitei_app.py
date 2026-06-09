@@ -206,10 +206,67 @@ def get_beforeinfo(place_no, race_no, date_str):
         except Exception as e:
             print(f"[StartExhibition] Error: {e}")
 
+        # 6. 気象情報のパース
+        weather = {
+            'temperature': 0.0,
+            'water_temperature': 0.0,
+            'wind_speed': 0.0,
+            'wave_height': 0.0,
+            'weather_text': '晴',
+            'wind_direction': '通常',
+            'wind_direction_num': 0
+        }
+        try:
+            weather_box = soup.find('div', class_='weather1')
+            if weather_box:
+                # 気温
+                el = weather_box.find('div', class_='is-direction')
+                if el:
+                    label = el.find('span', class_='weather1_bodyUnitLabelData')
+                    if label: weather['temperature'] = float(label.get_text(strip=True).replace('℃', ''))
+                
+                # 天候
+                el = weather_box.find('div', class_='is-weather')
+                if el:
+                    label = el.find('span', class_='weather1_bodyUnitLabelTitle')
+                    if label: weather['weather_text'] = label.get_text(strip=True)
+                
+                # 風速
+                el = weather_box.find('div', class_='is-wind')
+                if el:
+                    label = el.find('span', class_='weather1_bodyUnitLabelData')
+                    if label: weather['wind_speed'] = float(label.get_text(strip=True).replace('m', ''))
+                
+                # 風向
+                el = weather_box.find('div', class_='is-windDirection')
+                if el:
+                    p_el = el.find('p', class_=re.compile(r'is-wind\d+'))
+                    if p_el:
+                        cls = p_el.get('class', [])
+                        for c in cls:
+                            m = re.match(r'is-wind(\d+)', c)
+                            if m:
+                                weather['wind_direction_num'] = int(m.group(1))
+                                break
+                
+                # 水温
+                el = weather_box.find('div', class_='is-waterTemperature')
+                if el:
+                    label = el.find('span', class_='weather1_bodyUnitLabelData')
+                    if label: weather['water_temperature'] = float(label.get_text(strip=True).replace('℃', ''))
+                
+                # 波高
+                el = weather_box.find('div', class_='is-wave')
+                if el:
+                    label = el.find('span', class_='weather1_bodyUnitLabelData')
+                    if label: weather['wave_height'] = float(label.get_text(strip=True).replace('cm', ''))
+            result['weather'] = weather
+        except Exception as e:
+            print(f"[WeatherParse] Error: {e}")
+            result['weather'] = weather
+
     except Exception as e:
         print(f"[BeforeInfo] Error: {e}")
-    return result
-
     return result
 
 def get_odds3t(place_no, race_no, date_str):
@@ -450,7 +507,20 @@ def predict_race(place_no, race_no, date_str, players_df):
         players_df['straight_time'] = [before_info.get(int(t), {}).get('straight_time', 0.0) for t in players_df['teiban']]
         players_df['start_exhibition'] = [before_info.get(int(t), {}).get('start_exhibition', None) for t in players_df['teiban']]
 
-    except:
+        # 気象情報の追加
+        weather = before_info.get('weather', {
+            'temperature': 0.0, 'water_temperature': 0.0, 'wind_speed': 0.0,
+            'wave_height': 0.0, 'weather_text': '晴', 'wind_direction_num': 0
+        })
+        players_df['weather_temp'] = float(weather.get('temperature', 0.0))
+        players_df['weather_wtemp'] = float(weather.get('water_temperature', 0.0))
+        players_df['weather_wind'] = float(weather.get('wind_speed', 0.0))
+        players_df['weather_wave'] = float(weather.get('wave_height', 0.0))
+        players_df['weather_text'] = str(weather.get('weather_text', '晴'))
+        players_df['weather_wind_dir'] = int(weather.get('wind_direction_num', 0))
+
+    except Exception as e:
+        print(f"[PredictRace] Error: {e}")
         players_df['ai_prob'] = 1/6
         players_df['show_time'] = 0.0
         players_df['propeller'] = False
@@ -458,12 +528,50 @@ def predict_race(place_no, race_no, date_str, players_df):
         players_df['turn_time'] = 0.0
         players_df['straight_time'] = 0.0
         players_df['start_exhibition'] = None
+        players_df['weather_temp'] = 0.0
+        players_df['weather_wtemp'] = 0.0
+        players_df['weather_wind'] = 0.0
+        players_df['weather_wave'] = 0.0
+        players_df['weather_text'] = '晴'
+        players_df['weather_wind_dir'] = 0
     return players_df
+
+
+def calculate_3in_probabilities(final_scores):
+    """各艇の最終スコア（単勝確率に相当）から、3着以内に入る確率をPlackett-Luceモデルで計算"""
+    total_s = sum(final_scores.values())
+    if total_s == 0:
+        return {i: 0.5 for i in range(1, 7)}
+    
+    probs = {i: 0.0 for i in range(1, 7)}
+    import itertools
+    for c in itertools.permutations([1,2,3,4,5,6], 3):
+        t1, t2, t3 = c
+        p1 = final_scores[t1] / total_s
+        p2 = final_scores[t2] / max(total_s - final_scores[t1], 0.0001)
+        p3 = final_scores[t3] / max(total_s - final_scores[t1] - final_scores[t2], 0.0001)
+        prob = p1 * p2 * p3
+        
+        probs[t1] += prob
+        probs[t2] += prob
+        probs[t3] += prob
+        
+    return probs
 
 
 def apply_user_intuition(df_pred):
     # 新しい強力な補正ロジック (AIスコア + 各種最新データのダイナミック補正)
     df_pred['custom_prob'] = df_pred['ai_prob'].copy()
+    
+    # 全艇の全国勝率平均を計算（ブレンドの基準値）
+    all_wins = [float(row.get('win_rate', 0.0)) for i, row in df_pred.iterrows()]
+    avg_all_win = sum(all_wins) / len(all_wins) if all_wins else 5.0
+    if avg_all_win <= 0: avg_all_win = 5.0
+    
+    # 気象情報の取得（カラムから）
+    temp = df_pred['weather_temp'].iloc[0] if 'weather_temp' in df_pred.columns else 0.0
+    wind = df_pred['weather_wind'].iloc[0] if 'weather_wind' in df_pred.columns else 0.0
+    wave = df_pred['weather_wave'].iloc[0] if 'weather_wave' in df_pred.columns else 0.0
     
     # 型安全の保証 (スクレイピングデータ由来の文字列混入を防ぎ、比較演算でのTypeErrorを防止)
     for col in ['show_time', 'lap_time', 'turn_time', 'straight_time']:
@@ -482,16 +590,28 @@ def apply_user_intuition(df_pred):
 
     for i, row in df_pred.iterrows():
         score = row['ai_prob']
+        is_discarded = False
         
         # --- 1. 勝率アドバンテージ ---
         win_rate = row.get('win_rate', 0.0)
         local_win = row.get('local_win_rate', win_rate)
         avg_win_rate = (win_rate + local_win) / 2
         
+        # 勝率比によるベースブレンド (1.5乗)
+        win_ratio = avg_win_rate / avg_all_win if avg_all_win > 0 else 1.0
+        score = score * (win_ratio ** 1.5)
+
         # A1級や勝率上位レーサーへのベース加点
         if avg_win_rate >= 7.0: score += 0.15
         elif avg_win_rate >= 6.0: score += 0.08
         elif avg_win_rate < 4.0: score -= 0.08
+        
+        # 新兵・超低勝率レーサーの強力な足切り（実力的に3着以内はほぼ不可能なため舟券対象外）
+        if avg_win_rate < 3.0:
+            if avg_win_rate < 2.0:
+                is_discarded = True
+            else:
+                score = score * 0.2
         
         # 当地が極端に高い（当地巧者）
         if local_win - win_rate >= 1.0 and local_win >= 6.0:
@@ -615,6 +735,30 @@ def apply_user_intuition(df_pred):
         # 最終スコアへの反映（内部エンジン側での基本重み付け）
         score = score * confidence_score
 
+        # --- 6. 気象情報による補正 ---
+        if temp >= 30.0:
+            if course == 1: score -= 0.05
+            elif course in [3, 4]: score += 0.02
+        elif temp <= 10.0 and temp > 0:
+            if course == 1: score += 0.05
+
+        if wind >= 5.0 or wave >= 5.0:
+            if course == 1:
+                score -= 0.10
+            elif course == 2:
+                score += 0.05
+            elif course in [3, 4]:
+                if avg_win_rate >= 6.0:
+                    score += 0.08
+                else:
+                    score -= 0.03
+        elif wind >= 3.0:
+            if course == 1:
+                score -= 0.03
+
+        if is_discarded:
+            score = 0.01
+
         df_pred.at[i, 'custom_prob'] = max(0.01, score)
         
     # --- 後続艇への波及評価 ---
@@ -623,6 +767,14 @@ def apply_user_intuition(df_pred):
         if row.get('is_fast_but_low_skill', False):
             c = int(row['teiban'])
             for j, r in df_pred.iterrows():
+                win_rate_j = r.get('win_rate', 0.0)
+                local_win_j = r.get('local_win_rate', win_rate_j)
+                avg_win_j = (win_rate_j + local_win_j) / 2
+                
+                # 新兵（勝率2.0未満）は展開が良くても捲りについていけないため、加点対象外
+                if avg_win_j < 2.0:
+                    continue
+                    
                 if int(r['teiban']) == c + 1:
                     df_pred.at[j, 'custom_prob'] += 0.10 # 捲りの展開に乗る
                 elif int(r['teiban']) == c + 2:
@@ -637,6 +789,11 @@ def apply_user_intuition(df_pred):
     df_pred['ai_prob'] = df_pred['ai_prob'].astype(float)
     df_pred['custom_prob'] = df_pred['custom_prob'].astype(float)
     df_pred = df_pred.fillna(0)
+
+    # 3着以内確率の計算
+    score_map = dict(zip(df_pred['teiban'].astype(int), df_pred['custom_prob']))
+    probs_3in = calculate_3in_probabilities(score_map)
+    df_pred['prob_3in'] = df_pred['teiban'].astype(int).map(probs_3in).astype(float)
     
     return df_pred
 # ──────────────────────────────────────────
@@ -652,7 +809,7 @@ def draw_slit_diagram(players):
 
 def display_condensed_info(players, beforeinfo, df_pred):
     """情報を1行に凝縮表示（ヘッダーはmain側で出力）"""
-    show_times = [bi.get('show_time', 0.0) for bi in beforeinfo.values() if bi.get('show_time', 0.0) > 0]
+    show_times = [bi.get('show_time', 0.0) for k, bi in beforeinfo.items() if isinstance(k, int) and bi.get('show_time', 0.0) > 0]
     avg = sum(show_times) / len(show_times) if show_times else 0
     for p in players:
         t = int(p['teiban'])

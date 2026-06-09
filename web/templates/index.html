@@ -149,33 +149,104 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <!-- Left: Boat Cards -->
-            <div class="lg:col-span-2 space-y-4">
-                <h2 class="text-xl font-bold mb-4 flex items-center">
-                    <span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span> 出走表 & 直感調整
-                </h2>
-                <div id="boat-list" class="space-y-4">
-                    <!-- Cards will be injected here -->
-                    <div class="glass p-6 flex items-center justify-center text-gray-500 italic">
-                        レース情報を入力して予想ボタンを押してください
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Weather Controls -->
+                <div class="glass p-6">
+                    <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-sky-400">
+                        <span class="w-2.5 h-2.5 bg-sky-500 rounded-full animate-pulse"></span> 
+                        🌊 水面気象情報（リアルタイム自動取得・手動調整可能）
+                    </h2>
+                    <div class="grid grid-cols-3 md:grid-cols-6 gap-3">
+                        <div class="flex flex-col">
+                            <label class="text-[10px] text-gray-400 font-bold mb-1">気温 (℃)</label>
+                            <input type="number" id="weather-temp" step="0.5" class="bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 transition" onchange="recalculateAll()">
+                        </div>
+                        <div class="flex flex-col">
+                            <label class="text-[10px] text-gray-400 font-bold mb-1">水温 (℃)</label>
+                            <input type="number" id="weather-wtemp" step="0.5" class="bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 transition" onchange="recalculateAll()">
+                        </div>
+                        <div class="flex flex-col">
+                            <label class="text-[10px] text-gray-400 font-bold mb-1">風速 (m)</label>
+                            <input type="number" id="weather-wind" min="0" max="15" step="1" class="bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 transition" onchange="recalculateAll()">
+                        </div>
+                        <div class="flex flex-col">
+                            <label class="text-[10px] text-gray-400 font-bold mb-1">波高 (cm)</label>
+                            <input type="number" id="weather-wave" min="0" max="30" step="1" class="bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 transition" onchange="recalculateAll()">
+                        </div>
+                        <div class="flex flex-col">
+                            <label class="text-[10px] text-gray-400 font-bold mb-1">天候</label>
+                            <select id="weather-text" class="bg-[#1a1a2e] border border-white/10 rounded-lg px-2 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 transition" onchange="recalculateAll()">
+                                <option value="晴">晴</option>
+                                <option value="曇">曇</option>
+                                <option value="雨">雨</option>
+                                <option value="雪">雪</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col">
+                            <label class="text-[10px] text-gray-400 font-bold mb-1">風向</label>
+                            <select id="weather-wind-dir" class="bg-[#1a1a2e] border border-white/10 rounded-lg px-2 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 transition" onchange="recalculateAll()">
+                                <option value="通常">通常/横風</option>
+                                <option value="追い風">追い風</option>
+                                <option value="向かい風">向かい風</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h2 class="text-xl font-bold mb-4 flex items-center">
+                        <span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span> 出走表 & 直感調整
+                    </h2>
+                    <div id="boat-list" class="space-y-4">
+                        <!-- Cards will be injected here -->
+                        <div class="glass p-6 flex items-center justify-center text-gray-500 italic">
+                            レース情報を入力して予想ボタンを押してください
+                        </div>
                     </div>
                 </div>
             </div>
-
+ 
             <!-- Right: Results & Recommendations -->
             <div class="space-y-6">
                 <div class="glass p-6">
-                    <h2 class="text-xl font-bold mb-4">期待値上位 (3連単)</h2>
-                    <div id="recommendations" class="space-y-3">
+                    <h2 class="text-xl font-bold mb-3 flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse"></span>
+                        🎯 美味しい買い目 (EV >= 1.0)
+                    </h2>
+                    
+                    <!-- 中の的中確率トップ（ドラ）専用表示 -->
+                    <div id="dora-area" class="mb-4">
+                        <!-- Dora will be injected here -->
+                    </div>
+
+                    <div id="recommendations" class="space-y-3 mb-6">
                         <!-- Recs injected here -->
                     </div>
-                    <div id="log-button-container" class="mt-6 text-center" style="display: none;">
-                        <button id="log-btn" onclick="logToSpreadsheet()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
+
+                    <!-- テレボート一括コピー -->
+                    <div class="border-t border-white/10 pt-4">
+                        <div class="flex items-center justify-between gap-3 mb-3">
+                            <span class="text-xs text-gray-400 font-bold">1点あたりの投票金額:</span>
+                            <div class="flex items-center gap-1.5">
+                                <input type="number" id="bet-amount" value="100" min="100" step="100" class="w-20 bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs text-center font-bold text-white focus:outline-none focus:border-indigo-500 transition" onchange="updateCopyText()">
+                                <span class="text-xs text-gray-400">円</span>
+                            </div>
+                        </div>
+                        <button onclick="copyToTeleboat()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold py-3 px-4 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.2)] transition-all flex items-center justify-center gap-2 text-xs">
+                            📋 テレボート貼付用テキストを一括コピー
+                        </button>
+                        <div id="copy-success-msg" class="text-[10px] text-emerald-400 mt-1.5 text-center font-semibold hidden">
+                            ✓ コピー完了！テレボートの「テキスト入力」に貼り付けてください
+                        </div>
+                    </div>
+
+                    <div id="log-button-container" class="mt-4 text-center" style="display: none;">
+                        <button id="log-btn" onclick="logToSpreadsheet()" class="w-full bg-emerald-700/30 hover:bg-emerald-700/50 border border-emerald-600/40 text-emerald-300 font-bold py-2 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-2">
                             💾 この直感調整をAIに学習させる
                         </button>
                     </div>
-                    <div id="share-button-container" class="mt-4 text-center" style="display: none;">
-                        <button onclick="shareToX()" class="w-full bg-black hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-xl border border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.1)] transition-all flex items-center justify-center gap-2">
-                            <svg viewBox="0 0 24 24" class="w-5 h-5 fill-current"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                    <div id="share-button-container" class="mt-2 text-center" style="display: none;">
+                        <button onclick="shareToX()" class="w-full bg-black/40 hover:bg-black/60 border border-white/10 text-gray-300 font-bold py-2 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-2">
                             予想を 𝕏 でシェア
                         </button>
                     </div>
@@ -319,8 +390,19 @@
                     hitPrice = currentData.results.dividends["3連単"]?.price || "---";
                 }
 
+                // 取得した気象データをUIに初期値としてセット
+                if (currentData.beforeinfo && currentData.beforeinfo.weather) {
+                    const w = currentData.beforeinfo.weather;
+                    document.getElementById('weather-temp').value = w.temperature || 0;
+                    document.getElementById('weather-wtemp').value = w.water_temperature || 0;
+                    document.getElementById('weather-wind').value = w.wind_speed || 0;
+                    document.getElementById('weather-wave').value = w.wave_height || 0;
+                    document.getElementById('weather-text').value = w.weather_text || "晴";
+                    document.getElementById('weather-wind-dir').value = "通常"; // 初期値
+                }
+
                 renderUI();
-                drawDiagram();
+                recalculateAll(); // 初期描画時に気象・インライン調整を反映して計算
                 
                 // 学習ボタンのリセットと表示
                 if (currentData && !currentData.error) {
@@ -331,7 +413,7 @@
                         btnCont.style.display = 'block';
                         btn.innerText = '💾 この直感調整をAIに学習させる';
                         btn.disabled = false;
-                        btn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2";
+                        btn.className = "w-full bg-emerald-700/30 hover:bg-emerald-700/50 border border-emerald-600/40 text-emerald-300 font-bold py-2 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-2";
                     }
                     if (shareCont) shareCont.style.display = 'block';
                 }
@@ -342,8 +424,7 @@
 
         function updateIntuition(teiban, val) {
             intuitions[teiban] = parseFloat(val);
-            renderRecommendations();
-            drawDiagram();
+            recalculateAll();
         }
 
         function renderUI() {
@@ -353,18 +434,14 @@
             if (currentData.error) {
                 list.innerHTML = `<div class="glass p-10 text-center text-rose-400 font-bold text-lg">⚠️ 出走表データが取得できませんでした。<br><br><span class="text-sm text-gray-400">本日の開催がないか、レースが終了している可能性があります。<br>対象のレース場が本日開催しているかご確認ください。</span></div>`;
                 document.getElementById('recommendations').innerHTML = '';
+                document.getElementById('dora-area').innerHTML = '';
                 const boatG = document.getElementById('svg-boats');
                 if (boatG) boatG.innerHTML = '';
                 return;
             }
 
             // 1. レース確定結果（上部に強調）
-            let hitCombo = null;
-            let hitPrice = null;
-            if (currentData.results && currentData.results.rank && currentData.results.rank.length >= 3) {
-                hitCombo = currentData.results.rank.slice(0, 3).join('-');
-                hitPrice = currentData.results.dividends["3連単"]?.price || "---";
-
+            if (hitCombo) {
                 const resDiv = document.createElement('div');
                 resDiv.className = "glass p-4 bg-emerald-600/10 border-emerald-500/30 border mb-6 flex justify-between items-center";
                 resDiv.innerHTML = `
@@ -380,67 +457,21 @@
                 list.appendChild(resDiv);
             }
 
-            // 2. 選手リスト（凝縮UI）
+            // 2. 選手リストヘッダー
             const header = document.createElement('div');
             header.className = "hidden md:grid grid-cols-12 gap-4 px-6 text-[10px] text-gray-500 uppercase font-bold mb-2";
             header.innerHTML = `
                 <div class="col-span-1">艇</div>
                 <div class="col-span-3">選手・成績</div>
-                <div class="col-span-4 text-center">展示・オリジナルタイム・Tilt</div>
-                <div class="col-span-2 text-center">AIスコア / M</div>
+                <div class="col-span-4 text-center">展示タイム・チルト・モーター (コピペ・編集可能)</div>
+                <div class="col-span-2 text-center">3着内確率</div>
                 <div class="col-span-2 text-center">直感補正</div>
             `;
             list.appendChild(header);
 
-            // 平均展示タイム算出（差分用）
-            const getAvg = (key) => {
-                const times = currentData.players.map(p => {
-                    const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || {};
-                    return parseFloat(bi[key] || 0);
-                }).filter(t => t > 0);
-                return times.length ? times.reduce((a, b) => a + b) / times.length : 0;
-            };
-            const avgST = getAvg('show_time');
-            const avgLap = getAvg('lap_time');
-            const avgTurn = getAvg('turn_time');
-            const avgStr = getAvg('straight_time');
-
-            // 最速タイム（オリジナル展示）算出用
-            const getBest = (key) => {
-                const times = currentData.players.map(p => {
-                    const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || {};
-                    return parseFloat(bi[key] || 0);
-                }).filter(t => t > 0);
-                return times.length ? Math.min(...times) : 0;
-            };
-            const bestST = getBest('show_time');
-            const bestLap = getBest('lap_time');
-            const bestTurn = getBest('turn_time');
-            const bestStr = getBest('straight_time');
-
             currentData.players.forEach(p => {
-                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0, tilt: 0, propeller: false, lap_time: 0, turn_time: 0, straight_time: 0 };
-                const ai = currentData.ai_results.find(r => r.teiban == p.teiban);
+                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0, tilt: 0, propeller: false };
                 const st = bi && bi.show_time !== undefined ? parseFloat(bi.show_time) : 0;
-                const diff = st > 0 && avgST > 0 ? (st - avgST).toFixed(2) : "--";
-                const diffColor = st > 0 && st < avgST ? "text-emerald-400" : (st > avgST ? "text-rose-400" : "text-gray-500");
-
-                const lap = bi && bi.lap_time !== undefined ? parseFloat(bi.lap_time) : 0;
-                const turn = bi && bi.turn_time !== undefined ? parseFloat(bi.turn_time) : 0;
-                const strt = bi && bi.straight_time !== undefined ? parseFloat(bi.straight_time) : 0;
-
-                // 最速タイムかどうかの判定（一致すれば赤色強調）
-                const showClass = (st > 0 && st === bestST) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-300 font-bold';
-                const lapClass = (lap > 0 && lap === bestLap) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
-                const turnClass = (turn > 0 && turn === bestTurn) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
-                const strtClass = (strt > 0 && strt === bestStr) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
-
-                let origTags = [];
-                if (lap > 0 && avgLap > 0 && lap < avgLap - 0.1) origTags.push('<span class="text-[8px] bg-blue-500/20 text-blue-400 px-1 rounded border border-blue-500/30">総合◎</span>');
-                if (turn > 0 && avgTurn > 0 && turn < avgTurn - 0.05) origTags.push('<span class="text-[8px] bg-amber-500/20 text-amber-400 px-1 rounded border border-amber-500/30">出足◎</span>');
-                if (strt > 0 && avgStr > 0 && strt < avgStr - 0.03) origTags.push('<span class="text-[8px] bg-rose-500/20 text-rose-400 px-1 rounded border border-rose-500/30">伸び◎</span>');
-
-                const score = (ai ? (ai.custom_prob || ai.ai_prob) : 0) * 100;
 
                 const card = document.createElement('div');
                 card.className = `glass boat-card p-3 teiban-${p.teiban} grid grid-cols-1 md:grid-cols-12 items-center gap-4 mb-2`;
@@ -448,171 +479,400 @@
                     <div class="col-span-1 text-2xl font-black opacity-30 text-center">${p.teiban}</div>
                     <div class="col-span-3">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <span class="font-bold text-sm">${p.name}</span>
-                            ${diff < -0.04 ? '<span class="text-[8px] bg-emerald-500/20 text-emerald-400 px-1 rounded border border-emerald-500/30">一番時計</span>' : ''}
+                            <span class="font-bold text-sm text-white">${p.name}</span>
                             ${p.win_rate > 6.5 ? '<span class="text-[8px] bg-indigo-500/20 text-indigo-400 px-1 rounded border border-indigo-500/30">上位</span>' : ''}
                             ${bi.propeller ? '<span class="text-[8px] bg-orange-500/20 text-orange-400 px-1 rounded border border-orange-500/30">P交換</span>' : ''}
-                            ${p.local_win_rate && p.local_win_rate >= 6.0 && (p.local_win_rate - p.win_rate) >= 1.0 ? '<span class="text-[8px] bg-cyan-500/20 text-cyan-400 px-1 rounded border border-cyan-500/30">当地巧者</span>' : ''}
                             ${bi.parts_exchange && bi.parts_exchange !== 'なし' ? `<span class="text-[8px] bg-rose-500/20 text-rose-400 px-1 rounded border border-rose-500/30">${bi.parts_exchange}</span>` : ''}
                         </div>
                         <div class="text-[10px] text-gray-500 mt-1">勝率 ${p.win_rate.toFixed(2)} / ST ${p.ST.toFixed(2)}</div>
-                        <div class="flex items-center gap-1 mt-1 flex-wrap">
-                            ${origTags.join('')}
-                        </div>
                     </div>
                     <div class="col-span-4 text-center">
                         <div class="text-xs flex flex-row justify-center items-center gap-4">
                             <div class="flex flex-col items-center">
-                                <span class="text-[9px] text-gray-500 mb-0.5" title="展示タイム">展示</span>
+                                <span class="text-[9px] text-gray-500 mb-0.5">展示タイム</span>
                                 <div class="flex items-center gap-1">
-                                    <span class="font-mono ${showClass} transition-all duration-300 inline-block">${st > 0 ? st.toFixed(2) : '-.--'}</span>
-                                    <span class="${diffColor} font-mono text-[10px]">(${diff > 0 ? '+' : ''}${diff !== '--' ? diff : '-'})</span>
+                                    <input type="number" id="input-showtime-${p.teiban}" step="0.01" min="6.0" max="8.0" 
+                                           class="w-14 bg-white/5 border border-white/10 rounded text-center text-xs font-bold font-mono py-0.5 text-white" 
+                                           value="${st > 0 ? st.toFixed(2) : ''}" placeholder="-.--" onchange="recalculateAll()">
                                 </div>
                             </div>
                             <div class="flex flex-col items-center border-l border-white/10 pl-4">
-                                <span class="text-[9px] text-gray-500 mb-0.5">周 / 回 / 直</span>
+                                <span class="text-[9px] text-gray-500 mb-0.5">チルト / モーター2連</span>
                                 <div class="font-mono text-[10px] flex gap-1 items-center">
-                                    <span class="${lapClass} transition-all duration-300 inline-block">${lap > 0 ? lap.toFixed(2) : '-.--'}</span> <span class="text-gray-500 opacity-50">/</span>
-                                    <span class="${turnClass} transition-all duration-300 inline-block">${turn > 0 ? turn.toFixed(2) : '-.--'}</span> <span class="text-gray-500 opacity-50">/</span>
-                                    <span class="${strtClass} transition-all duration-300 inline-block">${strt > 0 ? strt.toFixed(2) : '-.--'}</span>
+                                    <input type="number" id="input-tilt-${p.teiban}" step="0.5" min="-0.5" max="3.0" 
+                                           class="w-10 bg-white/5 border border-white/10 rounded text-center text-[10px] py-0.5 text-white" 
+                                           value="${bi && bi.tilt !== undefined ? parseFloat(bi.tilt).toFixed(1) : '-0.5'}" onchange="recalculateAll()">°
+                                    <span class="text-gray-500 opacity-50">/</span>
+                                    <input type="number" id="input-motor-${p.teiban}" step="0.1" min="0" max="100" 
+                                           class="w-10 bg-white/5 border border-white/10 rounded text-center text-[10px] py-0.5 text-white" 
+                                           value="${p.motor_2ren.toFixed(1)}" onchange="recalculateAll()">%
                                 </div>
                             </div>
                         </div>
-                        <div class="text-[9px] text-gray-500 mt-1">
-                            チルト ${bi && bi.tilt !== undefined ? parseFloat(bi.tilt).toFixed(1) : '-.-'}°
-                        </div>
                     </div>
 
-                    <div class="col-span-2 text-center">
-                        <div class="text-sm font-bold text-indigo-400">${score.toFixed(1)}<span class="text-[8px] ml-0.5">pt</span></div>
-                        <div class="text-[9px] text-gray-500 mt-1">モーター ${p.motor_2ren}%</div>
+                    <div class="col-span-2 text-center flex flex-col justify-center items-center">
+                        <div class="text-[9px] text-gray-500 mb-0.5">3着内確率</div>
+                        <div class="text-sm font-bold text-sky-400" id="prob3in-${p.teiban}">0.0%</div>
+                        <div class="w-full bg-white/10 h-1.5 rounded-full mt-1 overflow-hidden max-w-[80px]">
+                            <div id="bar3in-${p.teiban}" class="bg-gradient-to-r from-sky-400 to-indigo-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
                     </div>
                     <div class="col-span-2 px-2 flex flex-col justify-center">
-                        <input type="range" class="w-full accent-indigo-500" min="0.5" max="2.0" step="0.1" value="${intuitions[p.teiban]}" 
+                        <input type="range" class="w-full accent-indigo-500" min="0.2" max="5.0" step="0.1" value="${intuitions[p.teiban]}" 
                                oninput="updateIntuition(${p.teiban}, this.value)">
                     </div>
                 `;
                 list.appendChild(card);
             });
-
-            renderRecommendations(hitCombo, hitPrice);
         }
 
-        function renderRecommendations(hitCombo, hitPrice) {
-            const container = document.getElementById('recommendations');
-            container.innerHTML = '';
-            if (!currentData || !currentData.ai_results) return;
+        let currentBetsList = [];
 
+        function recalculateAll() {
+            if (!currentData || currentData.error || !currentData.players) return;
+
+            // 1. 気象情報の取得
+            const temp = parseFloat(document.getElementById('weather-temp').value) || 0;
+            const wtemp = parseFloat(document.getElementById('weather-wtemp').value) || 0;
+            const wind = parseFloat(document.getElementById('weather-wind').value) || 0;
+            const wave = parseFloat(document.getElementById('weather-wave').value) || 0;
+            const wtext = document.getElementById('weather-text').value;
+            const wdir = document.getElementById('weather-wind-dir').value;
+
+            // 2. 展示タイム平均算出
+            let sumST = 0;
+            let countST = 0;
+            currentData.players.forEach(p => {
+                const val = parseFloat(document.getElementById(`input-showtime-${p.teiban}`).value);
+                if (val > 0) {
+                    sumST += val;
+                    countST++;
+                }
+            });
+            const avgST = countST > 0 ? sumST / countST : 0;
+
+            // 全艇の全国勝率平均を計算（ブレンドの基準値）
+            let sumWin = 0;
+            currentData.players.forEach(p => { sumWin += p.win_rate || 0; });
+            const avgAllWin = sumWin / 6.0 || 5.0;
+
+            // 3. 各艇のスコア（単勝比率）の計算
             let scores = {};
             let total = 0;
 
-            // 展開相関係数の定義
-            const correlations = {
-                4: { multiplier: 1.15, targets: [5, 6], threshold: 1.2 }, // 4カド捲り展開
-                1: { multiplier: 1.10, targets: [2, 3], threshold: 0.8, inverse: true } // 1号艇機力不安→差し展開
-            };
+            currentData.players.forEach(p => {
+                const t = p.teiban;
+                const ai = currentData.ai_results.find(r => r.teiban == t) || { ai_prob: 1/6 };
+                let score = ai.ai_prob; // AI予測確率をベース
 
-            currentData.ai_results.forEach(r => {
-                let w = intuitions[r.teiban] || 1.0;
-                
-                // 相関ロジックの適用
-                Object.keys(correlations).forEach(key => {
-                    const config = correlations[key];
-                    const sliderVal = intuitions[key];
-                    const isTriggered = config.inverse ? (sliderVal <= config.threshold) : (sliderVal >= config.threshold);
-                    
-                    if (isTriggered && config.targets.includes(r.teiban)) {
-                        w *= config.multiplier;
+                // UI入力値
+                const show_time = parseFloat(document.getElementById(`input-showtime-${t}`).value) || 0;
+                const tilt = parseFloat(document.getElementById(`input-tilt-${t}`).value) || 0;
+                const motor_2ren = parseFloat(document.getElementById(`input-motor-${t}`).value) || 0;
+                const intuition = intuitions[t] || 1.0;
+
+                // 勝率補正
+                let is_discarded = false;
+                const win_rate = p.win_rate || 0;
+                const local_win = p.local_win_rate || win_rate;
+                const avg_win = (win_rate + local_win) / 2;
+
+                // 勝率比によるベースブレンド (1.5乗)
+                const win_ratio = avg_win / avgAllWin;
+                score = score * Math.pow(win_ratio, 1.5);
+
+                if (avg_win >= 7.0) score += 0.15;
+                else if (avg_win >= 6.0) score += 0.08;
+                else if (avg_win < 4.0) score -= 0.08;
+
+                if (local_win - win_rate >= 1.0 && local_win >= 6.0) score += 0.08;
+
+                // 新兵・超低勝率レーサーの強力な足切り
+                if (avg_win < 3.0) {
+                    if (avg_win < 2.0) {
+                        is_discarded = true;
+                    } else {
+                        score = score * 0.2;
                     }
-                });
+                }
 
-                const s = (r.custom_prob || r.ai_prob || 0.01) * w;
-                scores[r.teiban] = s;
-                total += s;
+                // 展示タイム差補正
+                if (avgST > 0 && show_time > 0) {
+                    const diff_st = avgST - show_time;
+                    score += diff_st * 3.0;
+                }
+
+                // F・Lペナルティ
+                if (p.hidden_F) score -= 0.15;
+                if (p.F_count === 1) score -= 0.10;
+                else if (p.F_count >= 2) score -= 0.25;
+                if (p.L_count >= 1) score -= 0.15;
+
+                // モーター補正 (1号艇)
+                if (t === 1) {
+                    if (motor_2ren >= 40.0) score += 0.10;
+                    else if (motor_2ren < 30.0) score -= 0.10;
+                }
+
+                // 気象補正
+                if (temp >= 30.0) {
+                    if (t === 1) score -= 0.05;
+                    else if (t === 3 || t === 4) score += 0.02;
+                } else if (temp <= 10.0 && temp > 0) {
+                    if (t === 1) score += 0.05;
+                }
+
+                if (wind >= 5.0 || wave >= 5.0) {
+                    if (t === 1) score -= 0.10;
+                    else if (t === 2) score += 0.05;
+                    else if (t === 3 || t === 4) {
+                        if (avg_win >= 6.0) score += 0.08;
+                        else score -= 0.03;
+                    }
+                } else if (wind >= 3.0) {
+                    if (t === 1) score -= 0.03;
+                }
+
+                if (wdir === "向かい風" && wind >= 4.0) {
+                    if (avg_win >= 2.0) {
+                        if (t === 4 || t === 5 || t === 6) score += 0.04;
+                    }
+                    if (t === 1) score -= 0.04;
+                } else if (wdir === "追い風" && wind >= 4.0) {
+                    if (avg_win >= 2.0) {
+                        if (t === 2 || t === 3) score += 0.04;
+                    }
+                }
+
+                // スライダー補正
+                // 直感補正が1.0より大きい場合、減点ペナルティを打ち消し、加点を追加する
+                if (intuition > 1.0) {
+                    score = Math.max(score, 0.05); // 最低でも0.05のベースを確保
+                    score = score * intuition + (intuition - 1.0) * 0.20; // 直感度に応じた加算点
+                } else {
+                    score = score * intuition;
+                }
+
+                if (is_discarded) {
+                    // 強制足切り対象（勝率2.0未満）でも、直感が1.5以上なら足切りを解除して確率計算の対象に含める
+                    if (intuition >= 1.5) {
+                        score = 0.05 * intuition;
+                    } else {
+                        score = 0.01;
+                    }
+                }
+
+                scores[t] = Math.max(0.01, score);
+                total += scores[t];
             });
+
+            // スコアの正規化
             if (total === 0) total = 1;
+            for (let t = 1; t <= 6; t++) {
+                scores[t] = scores[t] / total;
+            }
+
+            // 3着以内確率の計算 (Plackett-Luce)
+            const probs3in = calculate3inProbabilities(scores);
+
+            // UIへの3着内確率反映
+            for (let t = 1; t <= 6; t++) {
+                const pct = (probs3in[t] * 100).toFixed(1);
+                const probEl = document.getElementById(`prob3in-${t}`);
+                const barEl = document.getElementById(`bar3in-${t}`);
+                if (probEl) probEl.innerText = pct + "%";
+                if (barEl) barEl.style.width = pct + "%";
+            }
+
+            // 期待値・美味しい買い目の再描画
+            renderRecommendations(scores);
+            drawDiagram(scores);
+        }
+
+        function calculate3inProbabilities(scores) {
+            let probs = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0};
+            const permutations = [];
+            const arr = [1,2,3,4,5,6];
+            for (let i = 0; i < 6; i++) {
+                for (let j = 0; j < 6; j++) {
+                    if (i === j) continue;
+                    for (let k = 0; k < 6; k++) {
+                        if (i === k || j === k) continue;
+                        permutations.push([arr[i], arr[j], arr[k]]);
+                    }
+                }
+            }
+
+            permutations.forEach(c => {
+                const t1 = c[0], t2 = c[1], t3 = c[2];
+                const p1 = scores[t1];
+                const p2 = scores[t2] / Math.max(1.0 - scores[t1], 0.0001);
+                const p3 = scores[t3] / Math.max(1.0 - scores[t1] - scores[t2], 0.0001);
+                const prob = p1 * p2 * p3;
+
+                probs[t1] += prob;
+                probs[t2] += prob;
+                probs[t3] += prob;
+            });
+            return probs;
+        }
+
+        function renderRecommendations(scores) {
+            const container = document.getElementById('recommendations');
+            const doraArea = document.getElementById('dora-area');
+            container.innerHTML = '';
+            doraArea.innerHTML = '';
+
+            if (!scores) {
+                scores = {};
+                let total = 0;
+                currentData.ai_results.forEach(r => {
+                    scores[r.teiban] = r.custom_prob || r.ai_prob;
+                    total += scores[r.teiban];
+                });
+                if (total === 0) total = 1;
+                for (let t = 1; t <= 6; t++) {
+                    scores[t] = (scores[t] || 0.01) / total;
+                }
+            }
 
             let topBets = [];
             const hasOdds = currentData.odds && Object.keys(currentData.odds).length > 0;
 
-            const getSujiMultiplier = (combo) => {
-                // スジによる加点（1.35倍等）を無効化し、AIの純粋なスコアで評価するように変更
-                return { mul: 1.0, name: "" };
-            };
-
             if (hasOdds) {
                 Object.entries(currentData.odds).forEach(([combo, odds]) => {
                     const [t1, t2, t3] = combo.split('-').map(Number);
-                    const p1 = scores[t1] / total;
-                    const p2 = scores[t2] / (total - scores[t1] || 1);
-                    const p3 = scores[t3] / (total - scores[t1] - scores[t2] || 1);
+                    const p1 = scores[t1];
+                    const p2 = scores[t2] / Math.max(1.0 - scores[t1], 0.0001);
+                    const p3 = scores[t3] / Math.max(1.0 - scores[t1] - scores[t2], 0.0001);
                     const prob = p1 * p2 * p3;
-                    const baseEv = prob * odds;
-                    
-                    const suji = getSujiMultiplier(combo);
-                    topBets.push({ combo, prob, odds, ev: baseEv, adjusted_ev: baseEv * suji.mul, suji_name: suji.name });
+                    const ev = prob * odds;
+                    topBets.push({ combo, prob, odds, ev });
                 });
-                topBets.sort((a, b) => b.adjusted_ev - a.adjusted_ev);
             } else {
-                // オッズがない場合
-                const boats = [1, 2, 3, 4, 5, 6];
-                for (let i = 0; i < boats.length; i++) {
-                    for (let j = 0; j < boats.length; j++) {
+                const arr = [1,2,3,4,5,6];
+                for (let i = 0; i < 6; i++) {
+                    for (let j = 0; j < 6; j++) {
                         if (i === j) continue;
-                        for (let k = 0; k < boats.length; k++) {
+                        for (let k = 0; k < 6; k++) {
                             if (i === k || j === k) continue;
-                            const r1 = boats[i], r2 = boats[j], r3 = boats[k];
-                            const p1 = scores[r1] / total;
-                            const p2 = scores[r2] / Math.max(total - scores[r1], 0.001);
-                            const p3 = scores[r3] / Math.max(total - scores[r1] - scores[r2], 0.001);
-                            const score = p1 * p2 * p3;
-                            
-                            const combo = `${r1}-${r2}-${r3}`;
-                            const suji = getSujiMultiplier(combo);
-                            topBets.push({ combo, ev: score, odds: 0, adjusted_ev: score * suji.mul, suji_name: suji.name });
+                            const t1 = arr[i], t2 = arr[j], t3 = arr[k];
+                            const p1 = scores[t1];
+                            const p2 = scores[t2] / Math.max(1.0 - scores[t1], 0.0001);
+                            const p3 = scores[t3] / Math.max(1.0 - scores[t1] - scores[t2], 0.0001);
+                            const prob = p1 * p2 * p3;
+                            topBets.push({ combo: `${t1}-${t2}-${t3}`, prob, odds: 0, ev: 0 });
                         }
                     }
                 }
-                topBets.sort((a, b) => b.adjusted_ev - a.adjusted_ev);
             }
 
-            topBets.slice(0, 8).forEach((b, i) => {
-                const isHit = b.combo === hitCombo;
-                const div = document.createElement('div');
-                div.className = `flex justify-between items-center p-3 rounded-lg border transition-all ${isHit ? 'bg-emerald-500/20 border-emerald-500 shadow-lg scale-[1.02]' : 'bg-white/5 border-white/10'}`;
+            // 的中確率トップの買い目を「ドラ」として抽出
+            topBets.sort((a, b) => b.prob - a.prob);
+            const doraBet = topBets[0];
 
+            // 期待値でソート
+            if (hasOdds) {
+                topBets.sort((a, b) => b.ev - a.ev);
+            }
+
+            // ドラの表示
+            if (doraBet) {
+                const isHit = doraBet.combo === hitCombo;
+                const div = document.createElement('div');
+                div.className = `p-4 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-2 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all ${isHit ? 'bg-emerald-500/20 border-emerald-500 shadow-lg' : ''}`;
                 div.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <div class="text-lg font-black tracking-widest">${b.combo}</div>
-                        ${isHit ? `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce">的中！ ¥${hitPrice}</span>` : ''}
-                    </div>
-                    <div class="text-right">
-                        <div class="text-[10px] text-gray-500">${b.odds > 0 ? b.odds.toFixed(1) + '倍' : 'AI予測スコア'}</div>
-                        <div class="text-xs font-bold ${b.ev > 1.2 ? 'text-indigo-400' : 'text-gray-400'}">${b.ev > 0 ? (b.odds > 0 ? 'EV ' + b.ev.toFixed(2) : (b.ev * 100).toFixed(2) + 'pt') : '---'}</div>
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-0.5 bg-amber-500 text-black text-[9px] font-black rounded uppercase tracking-wider">🀄 ドラ (確率トップ)</span>
+                            <div class="text-xl font-black tracking-widest text-white">${doraBet.combo}</div>
+                            ${isHit ? `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce">的中！ ¥${hitPrice}</span>` : ''}
+                        </div>
+                        <div class="text-right">
+                            <div class="text-[9px] text-gray-400">的中確率</div>
+                            <div class="text-xs font-bold text-amber-400">${(doraBet.prob * 100).toFixed(1)}%</div>
+                            ${doraBet.odds > 0 ? `<div class="text-[9px] text-gray-500">EV ${doraBet.ev.toFixed(2)} (${doraBet.odds.toFixed(1)}倍)</div>` : ''}
+                        </div>
                     </div>
                 `;
-                container.appendChild(div);
-            });
+                doraArea.appendChild(div);
+            }
 
-            // グローバル変数に格納してロギング可能にする
-            currentTopBets = topBets.slice(0, 8).map(b => b.combo);
-            currentBestForm = "";
+            // 期待値1.0以上の「美味しい買い目」を抽出
+            let deliciousBets = hasOdds ? topBets.filter(b => b.ev >= 1.0) : topBets.slice(0, 8);
+            currentBetsList = deliciousBets.map(b => b.combo);
+            currentTopBets = currentBetsList;
+
+            if (deliciousBets.length === 0) {
+                container.innerHTML = `
+                    <div class="p-6 rounded-lg bg-indigo-500/5 border border-indigo-500/10 text-center text-gray-400 text-xs italic">
+                        ⚠️ 期待値1.0を超える美味しい買い目はありません。<br>
+                        チルトや展示タイム、直感スライダーを調整して美味しい目を探すか、次のレースに進んでください。
+                    </div>
+                `;
+            } else {
+                deliciousBets.forEach((b, i) => {
+                    const isHit = b.combo === hitCombo;
+                    const evColor = b.ev >= 1.2 ? 'text-emerald-400 font-extrabold' : 'text-indigo-400';
+                    const div = document.createElement('div');
+                    div.className = `flex justify-between items-center p-3 rounded-lg border transition-all ${isHit ? 'bg-emerald-500/20 border-emerald-500 shadow-lg scale-[1.02]' : 'bg-white/5 border-white/10'}`;
+
+                    div.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <div class="text-lg font-black tracking-widest text-white">${b.combo}</div>
+                            ${isHit ? `<span class="px-2 py-0.5 bg-emerald-500 text-white text-[10px] rounded font-bold animate-bounce">的中！ ¥${hitPrice}</span>` : ''}
+                        </div>
+                        <div class="text-right">
+                            <div class="text-[10px] text-gray-500">${b.odds > 0 ? b.odds.toFixed(1) + '倍' : '的中確率'}</div>
+                            <div class="text-xs font-bold ${evColor}">${b.ev > 0 ? 'EV ' + b.ev.toFixed(2) : (b.prob * 100).toFixed(1) + '%'}</div>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
         }
 
-        function drawDiagram() {
+        function copyToTeleboat() {
+            if (!currentBetsList || currentBetsList.length === 0) {
+                alert("コピーする買い目がありません。");
+                return;
+            }
+            
+            const betAmount = parseInt(document.getElementById('bet-amount').value) || 100;
+            const textLines = currentBetsList.map(combo => {
+                const cleanCombo = combo.replace(/-/g, '');
+                return `${cleanCombo} ${betAmount}`;
+            });
+            
+            const copyText = textLines.join('\n');
+            
+            navigator.clipboard.writeText(copyText).then(() => {
+                const msg = document.getElementById('copy-success-msg');
+                if (msg) {
+                    msg.classList.remove('hidden');
+                    setTimeout(() => {
+                        msg.classList.add('hidden');
+                    }, 4000);
+                }
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                alert("コピーに失敗しました。");
+            });
+        }
+
+        function drawDiagram(scores) {
             const boatG = document.getElementById('svg-boats');
-            if (!boatG || !currentData || currentData.error || !currentData.ai_results) {
+            if (!boatG || !currentData || currentData.error) {
                 if (boatG) boatG.innerHTML = '';
                 return;
             }
+            boatG.innerHTML = '';
 
-            // 公式と同じ艇番カラー
             const colors = ["#ffffff", "#333333", "#ef4444", "#3b82f6", "#facc15", "#22c55e"];
-            const textColors = ["#000", "#fff", "#fff", "#fff", "#000", "#fff"];
 
             let allBoats = [1, 2, 3, 4, 5, 6].map(t => {
-                const res = currentData.ai_results.find(r => r.teiban == t);
-                const s = (res ? (res.custom_prob || res.ai_prob) : 0.05) * (intuitions[t] || 1.0);
+                const s = scores ? scores[t] : ((currentData.ai_results.find(r => r.teiban == t)?.custom_prob || 0.05) * (intuitions[t] || 1.0));
                 return { teiban: t, score: s };
             }).sort((a, b) => b.score - a.score);
 
@@ -623,20 +883,12 @@
                 const rad = angle * Math.PI / 180;
                 const baseX = 230 + Math.cos(rad) * radius;
                 const baseY = 130 + Math.sin(rad) * radius;
-
-                // 競艇は第1ターンマークを「左回り（反時計回り）」で旋回します。
-                // 画面座標系（Y軸が下向き正）において、反時計回りの接線方向（進行方向）の角度は angle - 90 になります。
-                // （※これまでは angle + 90 としてしまったため逆向きになっていました）
                 const boatRotate = angle - 90;
 
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${boatRotate})`);
-
-                // トップダウンから見たボートの形状（右側・0度方向が船首・前）
-                // 先端が丸みを帯び、後方が平らなボートらしいしずく寄りの形
                 const boatPath = "M -18,-7 L 5,-7 Q 22,-7 22,0 Q 22,7 5,7 L -18,7 Z";
 
-                // 文字タグなどは描画せず、SVGパスでボート本体と後部のモーター（黒い四角）を描画
                 g.innerHTML = `
                     <rect x="-23" y="-3" width="7" height="6" fill="#444" rx="2" style="filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.5));" />
                     <path d="${boatPath}" fill="${colors[t - 1]}" stroke="#222" stroke-width="1.5" style="filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.4));" />

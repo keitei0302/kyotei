@@ -14,12 +14,12 @@ def test_before_info():
     print(json.dumps(info, indent=2))
     
     # 成功判定（データが空でないか）
-    if any(v['show_time'] > 0 for v in info.values()):
+    if any(v['show_time'] > 0 for k, v in info.items() if isinstance(k, int)):
         print("\n[SUCCESS] 展示タイムを取得できました。")
     else:
         print("\n[INFO] 展示タイムは取得できませんでした（開催時間外の可能性があります）。")
 
-    if any(v['propeller'] for v in info.values()):
+    if any(v['propeller'] for k, v in info.items() if isinstance(k, int)):
         print("[SUCCESS] プロペラ交換情報を検知しました。")
     else:
         print("[INFO] プロペラ交換情報は False です（全員交換なし、または取得失敗）。")

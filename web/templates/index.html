@@ -252,31 +252,6 @@
                     </div>
                 </div>
 
-                <div class="glass p-6">
-                    <h2 class="text-xl font-bold mb-4">展開予想イメージ</h2>
-                    <div id="diagram-container"
-                        class="aspect-video w-full rounded-xl bg-[#0099e5] flex items-center justify-center overflow-hidden border border-white/10 relative">
-                        <svg id="race-svg" viewBox="0 0 500 300" class="w-full h-full">
-                            <!-- 水面（背景） -->
-                            <rect width="500" height="300" fill="#0099e5" />
-
-                            <!-- ターンマーク（SVGで描画・完全透過） -->
-                            <g id="turn-mark" transform="translate(250, 110)">
-                                <!-- ブイ本体（白ベース） -->
-                                <polygon points="-15,20 15,20 0,-20" fill="#ffffff" stroke="#333" stroke-width="1.5" />
-                                <!-- 赤い帯（上部） -->
-                                <polygon points="-6,-4 6,-4 9,4 -9,4" fill="#ef4444" stroke="#333" stroke-width="1" />
-                                <!-- 赤い帯（下部） -->
-                                <polygon points="-12,12 12,12 15,20 -15,20" fill="#ef4444" stroke="#333"
-                                    stroke-width="1" />
-                                <!-- 頭の黄色い球体 -->
-                                <circle cx="0" cy="-20" r="4" fill="#facc15" stroke="#333" stroke-width="1" />
-                            </g>
-
-                            <g id="svg-boats"></g>
-                        </svg>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -687,7 +662,6 @@
 
             // 期待値・美味しい買い目の再描画
             renderRecommendations(scores);
-            drawDiagram(scores);
         }
 
         function calculate3inProbabilities(scores) {
@@ -861,41 +835,6 @@
             });
         }
 
-        function drawDiagram(scores) {
-            const boatG = document.getElementById('svg-boats');
-            if (!boatG || !currentData || currentData.error) {
-                if (boatG) boatG.innerHTML = '';
-                return;
-            }
-            boatG.innerHTML = '';
-
-            const colors = ["#ffffff", "#333333", "#ef4444", "#3b82f6", "#facc15", "#22c55e"];
-
-            let allBoats = [1, 2, 3, 4, 5, 6].map(t => {
-                const s = scores ? scores[t] : ((currentData.ai_results.find(r => r.teiban == t)?.custom_prob || 0.05) * (intuitions[t] || 1.0));
-                return { teiban: t, score: s };
-            }).sort((a, b) => b.score - a.score);
-
-            allBoats.forEach((s, rank) => {
-                const t = s.teiban;
-                const radius = 60 + (rank * 25);
-                const angle = -40 + (rank * 15);
-                const rad = angle * Math.PI / 180;
-                const baseX = 230 + Math.cos(rad) * radius;
-                const baseY = 130 + Math.sin(rad) * radius;
-                const boatRotate = angle - 90;
-
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${baseX}, ${baseY}) rotate(${boatRotate})`);
-                const boatPath = "M -18,-7 L 5,-7 Q 22,-7 22,0 Q 22,7 5,7 L -18,7 Z";
-
-                g.innerHTML = `
-                    <rect x="-23" y="-3" width="7" height="6" fill="#444" rx="2" style="filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.5));" />
-                    <path d="${boatPath}" fill="${colors[t - 1]}" stroke="#222" stroke-width="1.5" style="filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.4));" />
-                `;
-                boatG.appendChild(g);
-            });
-        }
     </script>
 </body>
 

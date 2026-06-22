@@ -7,7 +7,7 @@ import sys
 # プロジェクトのルートディレクトリをパスに追加
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from keitei_app import get_today_players, get_beforeinfo, get_odds3t, get_race_result
+from keitei_app import get_today_players, get_beforeinfo, get_odds3t, get_race_result, get_motor_history, get_player_course_history
 import pickle
 import pandas as pd
 from datetime import datetime, timedelta
@@ -26,11 +26,14 @@ async def read_root(request: Request):
 from concurrent.futures import ThreadPoolExecutor
 
 @app.get("/api/predict")
-async def predict(place: str, race: int):
+async def predict(place: str, race: int, date: str = None):
     # 1. 日付計算（午前5時以前は前日分を取得）
-    # 日本時間 (JST) を取得 (UTC+9)
-    now_jst = datetime.utcnow() + timedelta(hours=9)
-    today_str = (now_jst - (timedelta(days=1) if now_jst.hour < 5 else timedelta(0))).strftime("%Y%m%d")
+    if date:
+        today_str = date
+    else:
+        # 日本時間 (JST) を取得 (UTC+9)
+        now_jst = datetime.utcnow() + timedelta(hours=9)
+        today_str = (now_jst - (timedelta(days=1) if now_jst.hour < 5 else timedelta(0))).strftime("%Y%m%d")
     
     print(f"\n[API] Processing Race: {place}#{race} (Date: {today_str})")
     
@@ -50,6 +53,13 @@ async def predict(place: str, race: int):
         return {"error": "No players found"}
 
     players_list = players.get("players", []) if isinstance(players, dict) else players
+
+    # 各選手のモーター履歴と枠番別過去走をDBから取得して追加
+    for p in players_list:
+        toban = p.get('toban', '')
+        motor_no = p.get('motor_no', 0)
+        p['motor_history'] = get_motor_history(place, motor_no) if motor_no else []
+        p['course_history'] = get_player_course_history(toban) if toban else {}
 
     # 2. 予測ロジックの実行 (keitei_app.py と同期)
     from keitei_app import predict_race, apply_user_intuition

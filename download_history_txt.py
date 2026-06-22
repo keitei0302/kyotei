@@ -125,36 +125,43 @@ def parse_k_text(text_bytes):
         "浜名湖": 6, "蒲郡": 7, "常滑": 8, "津": 9, "三国": 10,
         "びわこ": 11, "住之江": 12, "尼崎": 13, "鳴門": 14, "丸亀": 15,
         "児島": 16, "宮島": 17, "徳山": 18, "下関": 19, "若松": 20,
-        "芦屋": 21, "福岡": 22, "唐津": 23, "大村": 24
+        "芦屋": 21, "福岡": 22, "唐津": 23, "からつ": 23, "大村": 24
     }
-    place_no = 0
-    for name, no in PLACE_NAME_TO_NO.items():
-        if f"ボートレース{name}" in text or f"ＢＯＡＴ　ＲＡＣＥ{name}" in text or name in text[:300]:
-            place_no = no
-            break
-
-    # 2. レースごとの分割
-    race_blocks = re.split(r'\n\s*(\d{1,2})R\s+', text)
-    for i in range(1, len(race_blocks), 2):
-        race_num = int(race_blocks[i])
-        block_content = race_blocks[i+1]
+    
+    current_place_no = 0
+    current_race_num = 0
+    
+    lines = text.splitlines()
+    for line in lines:
+        clean_line = line.strip()
+        if not clean_line:
+            continue
+            
+        # 1. 場名の切り替え判定
+        # スペースを除去して判定する
+        no_space_line = clean_line.replace(' ', '').replace('\u3000', '')
+        if 'ボートレース' in no_space_line or 'BOATRACE' in no_space_line or '［成績］' in no_space_line:
+            for name, no in PLACE_NAME_TO_NO.items():
+                if name in no_space_line:
+                    current_place_no = no
+                    break
         
-        # 3. 各艇の成績行を抽出
-        # フォーマット例: 
-        # " 01 1 3527 今泉   徹 57 59 6.87 1 0.13 1.48.5"
-        #  (着) (枠) (登番) (氏名) (モ) (ボ) (展) (進) (ST) (タイム)
-        lines = block_content.splitlines()
-        for line in lines:
-            # 固定長ベースだが、スペース区切りでも正規表現で抜きやすい形式
-            # 着順(2桁) 枠(1桁) 登番(4桁) 氏名(任意) モーター(2-3桁) ボート(2-3桁) 展示(4桁) 進入(1桁) ST(4桁) タイム(任意)
+        # 2. レース番号の更新
+        race_start_match = re.match(r'^(\d{1,2})R\s+', clean_line)
+        if race_start_match:
+            current_race_num = int(race_start_match.group(1))
+            continue
+            
+        # 3. 選手成績行のパース
+        if current_place_no > 0 and current_race_num > 0:
             m = re.match(r'^\s*(\d{2})\s+(\d)\s+(\d{4})\s+.+?\s+(\d+)\s+(\d+)\s+(\d\.\d{2})\s+(\d)\s+(\d\.\d{2})', line)
             if m:
                 rank_raw, teiban, player_no, motor_no, boat_no, show_time, entry_course, st = m.groups()
                 rank = int(rank_raw)
                 records.append({
                     'date': date_str,
-                    'place_no': place_no,
-                    'race_no': race_num,
+                    'place_no': current_place_no,
+                    'race_no': current_race_num,
                     'teiban': int(teiban),
                     'rank': rank,
                     'player_no': player_no,

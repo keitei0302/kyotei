@@ -57,6 +57,7 @@ for i, tbody in enumerate(tbodies[:6]):
             motor_parts = tds[6].text.split()
             player_data['motor_no'] = int(motor_parts[0]) if len(motor_parts) > 0 and motor_parts[0].isdigit() else 0
             player_data['motor_2ren'] = float(motor_parts[1]) if len(motor_parts) > 1 else 0.0
+            player_data['motor_3ren'] = float(motor_parts[2]) if len(motor_parts) > 2 else 0.0
             
             # 8: ボート
             boat_parts = tds[7].text.split()

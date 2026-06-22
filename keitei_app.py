@@ -3,6 +3,7 @@ import numpy as np
 import warnings
 import os
 import re
+import sqlite3
 import json
 import sys
 import argparse
@@ -426,22 +427,63 @@ def get_today_players(place_no, race_no, date_str):
                     motor_parts = tds[6].get_text(separator=' ').split()
                     p['motor_no'] = motor_parts[0] if len(motor_parts) > 0 else '0'
                     p['motor_2ren'] = _safe_float(motor_parts[1], 0.0) if len(motor_parts) > 1 else 0.0
+                    p['motor_3ren'] = _safe_float(motor_parts[2], 0.0) if len(motor_parts) > 2 else 0.0
                     
                     boat_parts = tds[7].get_text(separator=' ').split()
                     p['boat_no'] = boat_parts[0] if len(boat_parts) > 0 else '0'
                     p['boat_2ren'] = _safe_float(boat_parts[1], 0.0) if len(boat_parts) > 1 else 0.0
             
+            # 選手登録番号と名前をキャッシュに保存
+            if 'toban' in p and p['toban'] and 'name' in p and p['name']:
+                save_racer_name_to_cache(p['toban'].strip(), p['name'].strip())
+            
             # 節間成績の取得 (着順の平均と節間ST平均)
             p['section_results'] = []
             p['section_st_avg'] = 0.0
             p['hidden_F'] = False
-            if len(trs) >= 3:
-                # 3行目以降が節間成績であることが多い
-                for tr in trs[2:]:
-                    for td in tr.find_all('td'):
-                        txt = td.get_text(strip=True)
-                        if 'F' in txt or 'L' in txt:
-                            p['hidden_F'] = True
+            if len(trs) >= 4:
+                chaku_tds = trs[1].find_all('td')
+                st_tds = trs[2].find_all('td')
+                course_tds = trs[3].find_all('td')
+                
+                info_tds = trs[0].find_all('td')
+                race_tds = info_tds[8:] if len(info_tds) > 8 else []
+                
+                num_cols = len(chaku_tds)
+                valid_st_sum = 0.0
+                valid_st_count = 0
+                
+                for col_idx in range(num_cols):
+                    chaku_txt = chaku_tds[col_idx].get_text(strip=True) if col_idx < len(chaku_tds) else ""
+                    st_txt = st_tds[col_idx].get_text(strip=True) if col_idx < len(st_tds) else ""
+                    course_txt = course_tds[col_idx].get_text(strip=True) if col_idx < len(course_tds) else ""
+                    
+                    race_txt = ""
+                    if col_idx < len(race_tds):
+                        race_txt = race_tds[col_idx].get_text(strip=True)
+                    
+                    if 'F' in chaku_txt or 'L' in chaku_txt or 'F' in st_txt or 'L' in st_txt:
+                        p['hidden_F'] = True
+                    
+                    if st_txt:
+                        clean_st = st_txt.replace('F', '').replace('L', '').strip()
+                        try:
+                            st_val = float(clean_st)
+                            valid_st_sum += st_val
+                            valid_st_count += 1
+                        except ValueError:
+                            pass
+                    
+                    if chaku_txt or st_txt or course_txt:
+                        p['section_results'].append({
+                            "race": race_txt,
+                            "chaku": chaku_txt,
+                            "st": st_txt,
+                            "course": course_txt
+                        })
+                
+                if valid_st_count > 0:
+                    p['section_st_avg'] = round(valid_st_sum / valid_st_count, 2)
             
             results.append(p)
         return {"players": results, "deadline": deadline} if len(results) == 6 else None
@@ -471,6 +513,253 @@ def get_player_course_data(toban):
         return course_stats
     except Exception as e:
         print(f"[CourseData] Error ({toban}): {e}")
+        return {}
+
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+racer_cache_lock = threading.Lock()
+
+def save_racer_name_to_cache(toban, name):
+    """選手名キャッシュを更新"""
+    cache_path = os.path.join(DATA_DIR, "racer_names.json")
+    with racer_cache_lock:
+        racer_names = {}
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    racer_names = json.load(f)
+            except:
+                pass
+        if toban not in racer_names or racer_names[toban] != name:
+            racer_names[toban] = name
+            try:
+                with open(cache_path, "w", encoding="utf-8") as f:
+                    json.dump(racer_names, f, ensure_ascii=False, indent=2)
+            except:
+                pass
+
+_skip_scraping_until = 0.0
+
+def get_racer_name(toban):
+    """登録番号から選手名を取得する。ローカルキャッシュを優先し、なければスクレイピングして保存。"""
+    global _skip_scraping_until
+    cache_path = os.path.join(DATA_DIR, "racer_names.json")
+    with racer_cache_lock:
+        racer_names = {}
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    racer_names = json.load(f)
+            except:
+                pass
+
+    if toban in racer_names and racer_names[toban] != toban and not racer_names[toban].isdigit():
+        return racer_names[toban]
+
+    # 直近で接続エラーやタイムアウトが発生していた場合はスクレイピングをスキップして時間を節約
+    import time
+    now = time.time()
+    if now < _skip_scraping_until:
+        return toban
+
+    # オンデマンドでプロフィールからスクレイピング
+    time.sleep(0.3) # WAF回避のための短いスリープ
+    url = f"https://www.boatrace.jp/owpc/pc/data/racersearch/profile?toban={toban}"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        # SSL検証無効化時の警告を抑制
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        # リトライなしで直接requests.getを使用。タイムアウト1.5秒。verify=FalseでSSLの失効チェック問題を回避。
+        res = requests.get(url, headers=headers, timeout=1.5, verify=False)
+        if res.status_code == 200:
+            res.encoding = 'utf-8'
+            soup = BeautifulSoup(res.text, 'html.parser')
+            name_el = soup.find('p', class_='racer1_bodyName')
+            if name_el:
+                name = name_el.get_text(strip=True).replace(' ', '').replace('\u3000', '')
+                if name and not name.isdigit():
+                    with racer_cache_lock:
+                        try:
+                            with open(cache_path, "r", encoding="utf-8") as f:
+                                racer_names = json.load(f)
+                        except:
+                            pass
+                        racer_names[toban] = name
+                        try:
+                            with open(cache_path, "w", encoding="utf-8") as f:
+                                json.dump(racer_names, f, ensure_ascii=False, indent=2)
+                        except:
+                            pass
+                    return name
+    except Exception as e:
+        print(f"[get_racer_name] Error fetching name for {toban}: {e}")
+        # タイムアウト等のエラー時は、今後60秒間はスクレイピングをスキップする
+        _skip_scraping_until = now + 60.0
+
+    return toban
+
+def get_motor_history(place_no, motor_no, limit=50):
+    """ローカルDBからモーターの使用履歴を取得し、節単位（選手および期間）でグループ化する"""
+    db_path = os.path.join(DATA_DIR, "boatrace_real.db")
+    if not os.path.exists(db_path):
+        return []
+    try:
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        # 過去の多くのレース結果を取得（節グループ化のため）
+        query = """
+            SELECT date, race_no, player_no, rank, entry_course, st, show_time 
+            FROM race_results 
+            WHERE place_no = ? AND motor_no = ? 
+            ORDER BY date DESC, race_no DESC 
+            LIMIT ?
+        """
+        c.execute(query, (int(place_no), int(motor_no), limit))
+        rows = c.fetchall()
+        conn.close()
+        
+        if not rows:
+            return []
+
+        # 日付文字列をパースする補助関数
+        def parse_date(d_str):
+            try:
+                return datetime.strptime(str(d_str), "%Y%m%d")
+            except:
+                return None
+
+        # 1. レース単位のデータを一時リストにする
+        raw_history = []
+        for r in rows:
+            raw_history.append({
+                "date_str": str(r[0]),
+                "date": parse_date(r[0]),
+                "race_no": int(r[1]),
+                "player_no": str(r[2]),
+                "rank": int(r[3]) if r[3] else 0,
+                "course": int(r[4]) if r[4] else 0,
+                "st": float(r[5]) if r[5] else 0.0,
+                "show_time": float(r[6]) if r[6] else 0.0
+            })
+            
+        # 日付の古い順に並べ替えてグループ化しやすくする
+        raw_history.reverse()
+
+        # 2. 節単位でグループ化する
+        sections = []
+        current_section = None
+
+        for race in raw_history:
+            # 節の区切り判定:
+            # - まだ節がない
+            # - 使用選手が変わった
+            # - 日付が4日以上空いた（同じ選手が期間を空けてまた乗る場合を考慮）
+            is_new_section = False
+            if current_section is None:
+                is_new_section = True
+            elif current_section["player_no"] != race["player_no"]:
+                is_new_section = True
+            elif race["date"] and current_section["last_date"]:
+                days_diff = (race["date"] - current_section["last_date"]).days
+                if days_diff > 4:
+                    is_new_section = True
+
+            if is_new_section:
+                if current_section is not None:
+                    sections.append(current_section)
+                current_section = {
+                    "player_no": race["player_no"],
+                    "player_name": "", # 後で解決する
+                    "start_date_str": race["date_str"],
+                    "end_date_str": race["date_str"],
+                    "last_date": race["date"],
+                    "ranks": [race["rank"]],
+                    "courses": [race["course"]],
+                    "sts": [race["st"]] if race["st"] > 0 else [],
+                    "show_times": [race["show_time"]] if race["show_time"] > 0 else []
+                }
+            else:
+                current_section["end_date_str"] = race["date_str"]
+                current_section["last_date"] = race["date"]
+                current_section["ranks"].append(race["rank"])
+                current_section["courses"].append(race["course"])
+                if race["st"] > 0:
+                    current_section["sts"].append(race["st"])
+                if race["show_time"] > 0:
+                    current_section["show_times"].append(race["show_time"])
+
+        if current_section is not None:
+            sections.append(current_section)
+
+        # 3. 直近の節から順にする（新しい節が先頭）
+        sections.reverse()
+        
+        # 表示件数の制限（直近5節分に制限）
+        sections = sections[:5]
+
+        # 4. 選手名を解決する
+        for sec in sections:
+            sec["player_name"] = get_racer_name(sec["player_no"])
+            
+            # 平均値の計算
+            sec["st_avg"] = round(sum(sec["sts"]) / len(sec["sts"]), 2) if sec["sts"] else 0.0
+            sec["show_time_avg"] = round(sum(sec["show_times"]) / len(sec["show_times"]), 2) if sec["show_times"] else 0.0
+            
+            # 不要な日時オブジェクト等は削除
+            if "last_date" in sec:
+                del sec["last_date"]
+            if "sts" in sec:
+                del sec["sts"]
+            if "show_times" in sec:
+                del sec["show_times"]
+
+        return sections
+    except Exception as e:
+        print(f"[get_motor_history] Error: {e}")
+        return []
+
+def get_player_course_history(toban, limit=10):
+    """ローカルDBから選手の枠番別（1〜6号艇ごと）の過去走履歴を取得"""
+    db_path = os.path.join(DATA_DIR, "boatrace_real.db")
+    if not os.path.exists(db_path):
+        return {}
+    try:
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        
+        course_history = {}
+        for teiban in range(1, 7):
+            query = """
+                SELECT date, place_no, race_no, rank, entry_course, st, show_time, motor_no
+                FROM race_results 
+                WHERE player_no = ? AND teiban = ? 
+                ORDER BY date DESC, race_no DESC 
+                LIMIT ?
+            """
+            c.execute(query, (str(toban), teiban, limit))
+            rows = c.fetchall()
+            
+            history_list = []
+            for r in rows:
+                history_list.append({
+                    "date": str(r[0]),
+                    "place_no": int(r[1]),
+                    "race_no": int(r[2]),
+                    "rank": int(r[3]) if r[3] else 0,
+                    "course": int(r[4]) if r[4] else 0,
+                    "st": float(r[5]) if r[5] else 0.0,
+                    "show_time": float(r[6]) if r[6] else 0.0,
+                    "motor_no": int(r[7]) if r[7] else 0
+                })
+            course_history[str(teiban)] = history_list
+            
+        conn.close()
+        return course_history
+    except Exception as e:
+        print(f"[get_player_course_history] Error: {e}")
         return {}
 
 # ──────────────────────────────────────────
@@ -640,7 +929,7 @@ def apply_user_intuition(df_pred):
 
         # --- 3. コース・モーター・ST（スタート想定）と能力評価の連動 ---
         course = int(row['teiban'])
-        motor_2ren = row.get('motor_2ren', 0.0)
+        motor_3ren = row.get('motor_3ren', 0.0)
         st_timing = row.get('ST', 0.15)
         st_ex = row.get('start_exhibition', None)
         
@@ -677,9 +966,9 @@ def apply_user_intuition(df_pred):
                 if st_timing < 0.15:
                     score += 0.15
             
-            if motor_2ren >= 40.0:
+            if motor_3ren >= 55.0:
                 score += 0.10
-            elif motor_2ren < 30.0:
+            elif motor_3ren < 40.0:
                 score -= 0.10
         elif course == 2:
             if avg_win_rate >= 6.0:

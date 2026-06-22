@@ -402,6 +402,24 @@
             recalculateAll();
         }
 
+        function changeDetailTab(teiban, tabName) {
+            // 全ての艇（1〜6）に対して同一のタブを一斉に切り替える
+            for (let t = 1; t <= 6; t++) {
+                document.querySelectorAll(`#tab-content-adjust-${t}, #tab-content-section-${t}, #tab-content-motor-${t}, #tab-content-past-${t}`).forEach(el => {
+                    el.classList.add('hidden');
+                });
+                document.querySelectorAll(`#tab-btn-adjust-${t}, #tab-btn-section-${t}, #tab-btn-motor-${t}, #tab-btn-past-${t}`).forEach(el => {
+                    el.className = "tab-btn px-2 py-0.5 rounded bg-white/5 text-gray-400 hover:bg-white/10 font-bold transition-all";
+                });
+
+                const activeContent = document.getElementById(`tab-content-${tabName}-${t}`);
+                if (activeContent) activeContent.classList.remove('hidden');
+
+                const activeBtn = document.getElementById(`tab-btn-${tabName}-${t}`);
+                if (activeBtn) activeBtn.className = "tab-btn px-2 py-0.5 rounded bg-indigo-600 text-white font-bold transition-all";
+            }
+        }
+
         function renderUI() {
             const list = document.getElementById('boat-list');
             list.innerHTML = '';
@@ -438,18 +456,38 @@
             header.innerHTML = `
                 <div class="col-span-1">艇</div>
                 <div class="col-span-3">選手・成績</div>
-                <div class="col-span-4 text-center">展示タイム・チルト・モーター (コピペ・編集可能)</div>
+                <div class="col-span-4 text-center">オリジナル展示タイム（周/回/直）</div>
                 <div class="col-span-2 text-center">3着内確率</div>
                 <div class="col-span-2 text-center">直感補正</div>
             `;
             list.appendChild(header);
 
+            // 最速タイム（オリジナル展示）算出用
+            const getBest = (key) => {
+                const times = currentData.players.map(pl => {
+                    const info = currentData.beforeinfo[pl.teiban.toString()] || currentData.beforeinfo[pl.teiban] || {};
+                    return parseFloat(info[key] || 0);
+                }).filter(t => t > 0);
+                return times.length ? Math.min(...times) : 0;
+            };
+            const bestLap = getBest('lap_time');
+            const bestTurn = getBest('turn_time');
+            const bestStr = getBest('straight_time');
+
             currentData.players.forEach(p => {
-                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0, tilt: 0, propeller: false };
+                const bi = currentData.beforeinfo[p.teiban.toString()] || currentData.beforeinfo[p.teiban] || { show_time: 0, tilt: 0, propeller: false, lap_time: 0, turn_time: 0, straight_time: 0 };
                 const st = bi && bi.show_time !== undefined ? parseFloat(bi.show_time) : 0;
+                const lap = bi && bi.lap_time !== undefined ? parseFloat(bi.lap_time) : 0;
+                const turn = bi && bi.turn_time !== undefined ? parseFloat(bi.turn_time) : 0;
+                const strt = bi && bi.straight_time !== undefined ? parseFloat(bi.straight_time) : 0;
+
+                // 最速タイムかどうかの判定（一致すれば赤色強調）
+                const lapClass = (lap > 0 && lap === bestLap) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
+                const turnClass = (turn > 0 && turn === bestTurn) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
+                const strtClass = (strt > 0 && strt === bestStr) ? 'text-rose-400 font-black drop-shadow-[0_0_8px_rgba(251,113,133,0.8)] scale-110' : 'text-gray-400';
 
                 const card = document.createElement('div');
-                card.className = `glass boat-card p-3 teiban-${p.teiban} grid grid-cols-1 md:grid-cols-12 items-center gap-4 mb-2`;
+                card.className = `glass boat-card p-4 teiban-${p.teiban} grid grid-cols-1 md:grid-cols-12 items-center gap-4 mb-3`;
                 card.innerHTML = `
                     <div class="col-span-1 text-2xl font-black opacity-30 text-center">${p.teiban}</div>
                     <div class="col-span-3">
@@ -462,26 +500,12 @@
                         <div class="text-[10px] text-gray-500 mt-1">勝率 ${p.win_rate.toFixed(2)} / ST ${p.ST.toFixed(2)}</div>
                     </div>
                     <div class="col-span-4 text-center">
-                        <div class="text-xs flex flex-row justify-center items-center gap-4">
-                            <div class="flex flex-col items-center">
-                                <span class="text-[9px] text-gray-500 mb-0.5">展示タイム</span>
-                                <div class="flex items-center gap-1">
-                                    <input type="number" id="input-showtime-${p.teiban}" step="0.01" min="6.0" max="8.0" 
-                                           class="w-14 bg-white/5 border border-white/10 rounded text-center text-xs font-bold font-mono py-0.5 text-white" 
-                                           value="${st > 0 ? st.toFixed(2) : ''}" placeholder="-.--" onchange="recalculateAll()">
-                                </div>
-                            </div>
-                            <div class="flex flex-col items-center border-l border-white/10 pl-4">
-                                <span class="text-[9px] text-gray-500 mb-0.5">チルト / モーター2連</span>
-                                <div class="font-mono text-[10px] flex gap-1 items-center">
-                                    <input type="number" id="input-tilt-${p.teiban}" step="0.5" min="-0.5" max="3.0" 
-                                           class="w-10 bg-white/5 border border-white/10 rounded text-center text-[10px] py-0.5 text-white" 
-                                           value="${bi && bi.tilt !== undefined ? parseFloat(bi.tilt).toFixed(1) : '-0.5'}" onchange="recalculateAll()">°
-                                    <span class="text-gray-500 opacity-50">/</span>
-                                    <input type="number" id="input-motor-${p.teiban}" step="0.1" min="0" max="100" 
-                                           class="w-10 bg-white/5 border border-white/10 rounded text-center text-[10px] py-0.5 text-white" 
-                                           value="${p.motor_2ren.toFixed(1)}" onchange="recalculateAll()">%
-                                </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-[9px] text-gray-500 mb-0.5">周 / 回 / 直</span>
+                            <div class="font-mono text-xs flex gap-1 items-center justify-center">
+                                <span class="${lapClass} transition-all duration-300 inline-block">${lap > 0 ? lap.toFixed(2) : '-.--'}</span> <span class="text-gray-500 opacity-50">/</span>
+                                <span class="${turnClass} transition-all duration-300 inline-block">${turn > 0 ? turn.toFixed(2) : '-.--'}</span> <span class="text-gray-500 opacity-50">/</span>
+                                <span class="${strtClass} transition-all duration-300 inline-block">${strt > 0 ? strt.toFixed(2) : '-.--'}</span>
                             </div>
                         </div>
                     </div>
@@ -496,6 +520,149 @@
                     <div class="col-span-2 px-2 flex flex-col justify-center">
                         <input type="range" class="w-full accent-indigo-500" min="0.2" max="5.0" step="0.1" value="${intuitions[p.teiban]}" 
                                oninput="updateIntuition(${p.teiban}, this.value)">
+                    </div>
+
+                    <!-- 下部詳細タブセクション -->
+                    <div class="col-span-12 border-t border-white/5 mt-2 pt-2 text-left">
+                        <div class="flex flex-wrap gap-1 mb-2 text-[9px]">
+                            <button onclick="changeDetailTab(${p.teiban}, 'adjust')" id="tab-btn-adjust-${p.teiban}" class="tab-btn px-2 py-0.5 rounded bg-indigo-600 text-white font-bold transition-all">直前調整</button>
+                            <button onclick="changeDetailTab(${p.teiban}, 'section')" id="tab-btn-section-${p.teiban}" class="tab-btn px-2 py-0.5 rounded bg-white/5 text-gray-400 hover:bg-white/10 font-bold transition-all">今節成績</button>
+                            <button onclick="changeDetailTab(${p.teiban}, 'motor')" id="tab-btn-motor-${p.teiban}" class="tab-btn px-2 py-0.5 rounded bg-white/5 text-gray-400 hover:bg-white/10 font-bold transition-all">モーター履歴</button>
+                            <button onclick="changeDetailTab(${p.teiban}, 'past')" id="tab-btn-past-${p.teiban}" class="tab-btn px-2 py-0.5 rounded bg-white/5 text-gray-400 hover:bg-white/10 font-bold transition-all">${p.teiban}枠過去走</button>
+                        </div>
+                        
+                        <!-- タブコンテンツ: 直前調整 -->
+                        <div id="tab-content-adjust-${p.teiban}" class="tab-content">
+                            <div class="text-[10px] flex flex-row items-center gap-4 py-1.5 justify-start">
+                                <div class="flex flex-col">
+                                    <span class="text-[8px] text-gray-500 mb-0.5">展示タイム</span>
+                                    <input type="number" id="input-showtime-${p.teiban}" step="0.01" min="6.0" max="8.0" 
+                                           class="w-16 bg-white/5 border border-white/10 rounded text-center text-[10px] font-bold font-mono py-0.5 text-white" 
+                                           value="${st > 0 ? st.toFixed(2) : ''}" placeholder="-.--" onchange="recalculateAll()">
+                                </div>
+                                <div class="flex flex-col border-l border-white/10 pl-3">
+                                    <span class="text-[8px] text-gray-500 mb-0.5">チルト</span>
+                                    <input type="number" id="input-tilt-${p.teiban}" step="0.5" min="-0.5" max="3.0" 
+                                           class="w-10 bg-white/5 border border-white/10 rounded text-center text-[10px] py-0.5 text-white" 
+                                           value="${bi && bi.tilt !== undefined ? parseFloat(bi.tilt).toFixed(1) : '-0.5'}" onchange="recalculateAll()">
+                                </div>
+                                <div class="flex flex-col border-l border-white/10 pl-3">
+                                    <span class="text-[8px] text-gray-500 mb-0.5">モーター3連</span>
+                                    <div class="flex items-center gap-0.5">
+                                        <input type="number" id="input-motor-${p.teiban}" step="0.1" min="0" max="100" 
+                                               class="w-12 bg-white/5 border border-white/10 rounded text-center text-[10px] py-0.5 text-white" 
+                                               value="${p.motor_3ren ? p.motor_3ren.toFixed(1) : '0.0'}" onchange="recalculateAll()">
+                                        <span class="text-[9px] text-gray-400">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- タブコンテンツ: 今節成績 -->
+                        <div id="tab-content-section-${p.teiban}" class="tab-content hidden">
+                            <div class="overflow-x-auto max-h-32 overflow-y-auto">
+                                <table class="w-full text-left border-collapse text-[9px]">
+                                    <thead>
+                                        <tr class="border-b border-white/10 text-gray-500 font-bold">
+                                            <th class="py-1">レース</th>
+                                            <th class="py-1">進入</th>
+                                            <th class="py-1">ST</th>
+                                            <th class="py-1">着順</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${p.section_results && p.section_results.length > 0 ? p.section_results.map(r => `
+                                            <tr class="border-b border-white/5 text-gray-300">
+                                                <td class="py-0.5">${r.race || '-'}</td>
+                                                <td class="py-0.5 font-mono">${r.course || '-'}</td>
+                                                <td class="py-0.5 font-mono">${r.st || '-'}</td>
+                                                <td class="py-0.5 font-bold ${r.chaku == '1' ? 'text-amber-400' : (r.chaku == '2' || r.chaku == '3' ? 'text-sky-400' : 'text-gray-400')}">${r.chaku || '-'}</td>
+                                            </tr>
+                                        `).join('') : `
+                                            <tr>
+                                                <td colspan="4" class="py-2 text-center text-gray-500 italic">今節の成績データはありません</td>
+                                            </tr>
+                                        `}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- タブコンテンツ: モーター履歴 -->
+                        <div id="tab-content-motor-${p.teiban}" class="tab-content hidden">
+                            <div class="overflow-x-auto max-h-32 overflow-y-auto">
+                                <table class="w-full text-left border-collapse text-[9px]">
+                                    <thead>
+                                        <tr class="border-b border-white/10 text-gray-500 font-bold">
+                                            <th class="py-1">期間</th>
+                                            <th class="py-1">選手</th>
+                                            <th class="py-1">着順成績</th>
+                                            <th class="py-1">平均ST</th>
+                                            <th class="py-1">平均展示</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${p.motor_history && p.motor_history.length > 0 ? p.motor_history.map(h => {
+                                            const startStr = h.start_date_str ? `${h.start_date_str.substring(4,6)}/${h.start_date_str.substring(6,8)}` : '-';
+                                            const endStr = h.end_date_str ? `${h.end_date_str.substring(4,6)}/${h.end_date_str.substring(6,8)}` : '-';
+                                            const periodStr = startStr === endStr ? startStr : `${startStr}〜${endStr}`;
+                                            const rankStr = h.ranks ? h.ranks.join(', ') : '-';
+                                            return `
+                                            <tr class="border-b border-white/5 text-gray-300">
+                                                <td class="py-0.5 whitespace-nowrap">${periodStr}</td>
+                                                <td class="py-0.5 font-bold">${h.player_name || h.player_no || '-'}</td>
+                                                <td class="py-0.5">${rankStr}</td>
+                                                <td class="py-0.5 font-mono">${h.st_avg ? h.st_avg.toFixed(2) : '-'}</td>
+                                                <td class="py-0.5 font-mono">${h.show_time_avg ? h.show_time_avg.toFixed(2) : '-'}</td>
+                                            </tr>
+                                            `;
+                                        }).join('') : `
+                                            <tr>
+                                                <td colspan="5" class="py-2 text-center text-gray-500 italic">モーター履歴データはありません（DBが古い可能性があります）</td>
+                                            </tr>
+                                        `}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- タブコンテンツ: 枠番過去走 -->
+                        <div id="tab-content-past-${p.teiban}" class="tab-content hidden">
+                            <div class="overflow-x-auto max-h-32 overflow-y-auto">
+                                <table class="w-full text-left border-collapse text-[9px]">
+                                    <thead>
+                                        <tr class="border-b border-white/10 text-gray-500 font-bold">
+                                            <th class="py-1">日付</th>
+                                            <th class="py-1">場</th>
+                                            <th class="py-1">進入</th>
+                                            <th class="py-1">ST</th>
+                                            <th class="py-1">モーター</th>
+                                            <th class="py-1">着順</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${p.course_history && p.course_history[p.teiban.toString()] && p.course_history[p.teiban.toString()].length > 0 ? p.course_history[p.teiban.toString()].map(h => {
+                                            const dStr = h.date ? `${h.date.substring(4,6)}/${h.date.substring(6,8)}` : '-';
+                                            const placeName = Object.keys(places).find(k => places[k] === h.place_no.toString().padStart(2, '0')) || h.place_no;
+                                            return `
+                                            <tr class="border-b border-white/5 text-gray-300">
+                                                <td class="py-0.5">${dStr}</td>
+                                                <td class="py-0.5">${placeName}</td>
+                                                <td class="py-0.5 font-mono">${h.course || '-'}</td>
+                                                <td class="py-0.5 font-mono">${h.st ? h.st.toFixed(2) : '-'}</td>
+                                                <td class="py-0.5 font-mono">#${h.motor_no || '-'}</td>
+                                                <td class="py-0.5 font-bold ${h.rank == 1 ? 'text-amber-400' : (h.rank == 2 || h.rank == 3 ? 'text-sky-400' : 'text-gray-400')}">${h.rank || '-'}</td>
+                                            </tr>
+                                            `;
+                                        }).join('') : `
+                                            <tr>
+                                                <td colspan="6" class="py-2 text-center text-gray-500 italic">この枠番での過去走データはありません（DBが古い可能性があります）</td>
+                                            </tr>
+                                        `}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 `;
                 list.appendChild(card);
@@ -544,7 +711,7 @@
                 // UI入力値
                 const show_time = parseFloat(document.getElementById(`input-showtime-${t}`).value) || 0;
                 const tilt = parseFloat(document.getElementById(`input-tilt-${t}`).value) || 0;
-                const motor_2ren = parseFloat(document.getElementById(`input-motor-${t}`).value) || 0;
+                const motor_3ren = parseFloat(document.getElementById(`input-motor-${t}`).value) || 0;
                 const intuition = intuitions[t] || 1.0;
 
                 // 勝率補正
@@ -586,8 +753,8 @@
 
                 // モーター補正 (1号艇)
                 if (t === 1) {
-                    if (motor_2ren >= 40.0) score += 0.10;
-                    else if (motor_2ren < 30.0) score -= 0.10;
+                    if (motor_3ren >= 55.0) score += 0.10;
+                    else if (motor_3ren < 40.0) score -= 0.10;
                 }
 
                 // 気象補正
@@ -837,9 +1004,4 @@
 
     </script>
 </body>
-
-</html>
-</script>
-</body>
-
 </html>
